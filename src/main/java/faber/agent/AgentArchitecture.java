@@ -53,7 +53,6 @@ public class AgentArchitecture {
     
     
 	public AgentArchitecture(Agent agent, EventQueue eventQueue, LlmClient llmClient) {
-		this.agent = agent;
         this.eventQueue = eventQueue;	
     	this.agent = agent;	
         llm = llmClient;

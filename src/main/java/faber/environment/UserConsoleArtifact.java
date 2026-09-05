@@ -51,7 +51,7 @@ public final class UserConsoleArtifact extends Artifact {
                         "the user sent a new message",
                         List.of(new Manual.Param("text", "message text")))),
                 List.of(new Manual.Operation("send_msg_to_user(text)",
-                        "send a message to the user. The 'text' parameter is a string, it should not contain double quote symbols (only single quote)", List.of())),
+                        "send a message to the user.", List.of())),
                 null
         );
     }
