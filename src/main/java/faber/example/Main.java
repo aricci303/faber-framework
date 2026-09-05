@@ -34,12 +34,6 @@ public final class Main {
         SimpleCounter counter01 = new SimpleCounter("counter-01", workspace, 0);
         workspace.provision("counter-01", "SimpleCounter", counter01);
         
-        /*
-        workspace.registerType(Counter.manual(), Counter.factory(workspace));
-        Counter counter01 = new Counter("counter-01", workspace, 0);
-        workspace.provision("counter-01", "Counter", counter01);
-         */
-        
         Agent agent = new Agent("agent-0");
         // Agent agent = new Agent("agent-0", new MockLlmClient());
         agent.init(workspace);

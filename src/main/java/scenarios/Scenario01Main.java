@@ -5,7 +5,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import faber.agent.Agent;
 import faber.agent.LlmClient;
 import faber.environment.Workspace;
-import faber.example.Counter;
 
 /**
  * Runs Stage 0 for real, updated for the operation_started refinement:
