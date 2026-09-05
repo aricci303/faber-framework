@@ -111,9 +111,15 @@ Each time you are invoked, your context will contain, in this order:
      operation's "outputs" are both optional — omit or leave empty for
      types with no signals, or operations with no output values.
 
-     A manual's full JSON is given the first time its type appears in your
-     workspace.
-
+     A manual's full JSON is given every turn for every type currently
+     present in the workspace, in full, unconditionally — the same
+     guarantee given to WORKSPACE's other contents and to PENDING
+     INTENTIONS. This is not shown once and then relied on from memory:
+     nothing about a given turn's forward pass survives to the next one
+     except what is written into that turn's own context, so a manual
+     shown once and never repeated would be, in every later turn,
+     genuinely absent rather than something you could recall.
+     
      Example manual for the "BoundedCounter" type:
        {
          "artifact-type": "BoundedCounter",

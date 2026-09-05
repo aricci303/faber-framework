@@ -53,7 +53,9 @@ public final class FlightBookingArtifact extends Artifact {
                 return List.of(bookingId, date);
             }
             case "list_available_dates": {
-                return List.of(new JSONArray(ALTERNATIVE_DATES));
+                String origin = params.getString("origin");
+                String destination = params.getString("destination");
+                return List.of(origin, destination,new JSONArray(ALTERNATIVE_DATES));
             }
             default:
                 throw new IllegalArgumentException("unknown operation: " + operationName);
@@ -72,8 +74,8 @@ public final class FlightBookingArtifact extends Artifact {
                                 "book a flight for the given date; fails if no seats are available on that date",
                                 List.of(new Param("booking_id", "id of the confirmed booking"),
                                         new Param("confirmed_date", "the date actually booked"))),
-                        new Operation("list_available_dates(destination)",
-                                "get dates with known availability for this destination, useful after a booking failure",
+                        new Operation("list_available_dates(origin,destination)",
+                                "get dates with known availability for from 'origin' to 'destination', useful after a booking failure",
                                 List.of(new Param("dates", "list of available dates")))
                 ),
                 null
