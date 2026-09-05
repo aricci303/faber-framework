@@ -53,7 +53,7 @@ public abstract class Artifact {
                 List<Object> outputs = doOperation(operationName, params);
                 requestor.notifyNewPercept(Percept.operationCompleted(correlationId, outputs));
             } catch (Exception e) {
-                this.notifyNewPerceptToObserverAgents(Percept.operationFailed(correlationId, e.getMessage()));
+            	requestor.notifyNewPercept(Percept.operationFailed(correlationId, e.getMessage()));
             }
         });
     }
@@ -64,7 +64,7 @@ public abstract class Artifact {
 
     public void addObserverAgent(Agent agent) {
     	observerAgents.add(agent);
-    	agent.notifyNewPercept(Percept.focusChanged(id, true));
+    	// agent.notifyNewPercept(Percept.focusChanged(id, true));
     }
 
     public void removeObserverAgent(String agentId) {
@@ -73,7 +73,7 @@ public abstract class Artifact {
     		var ag = it.next();
     		if (ag.getAgentId().equals(agentId)) {
     			it.remove();
-    	    	ag.notifyNewPercept(Percept.focusChanged(id, false));
+    	    	// ag.notifyNewPercept(Percept.focusChanged(id, false));
     			break;
     		}
     	}

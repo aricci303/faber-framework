@@ -52,20 +52,17 @@ public class AgentArchitecture {
     			Coherence.Result coherence) {}
     
     
-	public AgentArchitecture(Agent agent, EventQueue eventQueue) {
-		this.agent = agent;
-        this.eventQueue = eventQueue;	
-    	this.agent = agent;	
-        llm = new LlmClient.AnthropicLlmClient(Model.CLAUDE_SONNET_5);
-	}
-
 	public AgentArchitecture(Agent agent, EventQueue eventQueue, LlmClient llmClient) {
 		this.agent = agent;
         this.eventQueue = eventQueue;	
     	this.agent = agent;	
         llm = llmClient;
 	}
-	
+
+	public AgentArchitecture(Agent agent, EventQueue eventQueue) {
+		this(agent, eventQueue, new LlmClient.AnthropicLlmClient(Model.CLAUDE_SONNET_5));
+	}
+
 	void init(Workspace workspace) {
 		this.workspace = workspace;		
         mechanicalLog = new MechanicalLog();
@@ -144,7 +141,7 @@ public class AgentArchitecture {
 	    private String assembleContext(List<Percept> percepts) {
 	        StringBuilder sb = new StringBuilder();
 	        sb.append("[MECHANICAL LOG]\n").append(mechanicalLog.toContextBlock()).append("\n\n");
-	        sb.append("[WORKSPACE]\n").append(workspace.toContextBlock()).append("\n");
+	        sb.append("[WORKSPACE]\n").append(workspace.toContextBlock(agent)).append("\n");
 	        sb.append("[PENDING INTENTIONS]\n").append(goalLedger.toContextBlock()).append("\n\n");
 	        sb.append("[STATE OF MIND]\n").append(stateOfMind.current()).append("\n\n");
 	        sb.append("[NEW PERCEPTS]\n");

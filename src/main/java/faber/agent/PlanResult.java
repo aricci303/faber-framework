@@ -49,26 +49,22 @@ public final class PlanResult {
             throw new IllegalStateException("Model output missing <action>.");
         }
         String som = somMatcher.group(1).trim();
-        /*
-        if (som.indexOf("\"") > -1) {
-        	som = som.replaceAll("\"", "'");
-        }*/
 
         JSONObject parsed = null;
         String act = actMatcher.group(1).trim();
         
         /* since it is supposed to be a JSON, some char are now allowed */
+        /*
         if (act.indexOf("\r") > -1) {
         	act = act.replaceAll("\r", "");
         }
         if (act.indexOf("\n") > -1) {
         	act = act.replaceAll("\n", "");
-        }
-        try { 
-            parsed = new JSONObject(act);
-        } catch(Exception ex) {
-        	ex.printStackTrace();
-        	System.out.println(act);
+        }*/
+        try {
+        	parsed = new JSONObject(act);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Model output malformed <act> (not a valid JSON object)");
         }
         
         Object kindRaw = parsed.get("kind");

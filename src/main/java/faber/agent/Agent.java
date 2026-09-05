@@ -1,7 +1,11 @@
 package faber.agent;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import faber.agent.formal.PredictiveSufficiencyProtocol;
 import faber.agent.formal.Relation;
+import faber.environment.Artifact;
 import faber.environment.Workspace;
 
 public class Agent {
@@ -11,16 +15,22 @@ public class Agent {
 	private EventQueue eventQueue;
 	private String apiKey, llmModel;
 	private Workspace workspace;
+	private ArrayList<Artifact> observedArtifacts;
 
-	public Agent(String agentId) {
-		this.agentId = agentId;
+	protected Agent() {
 		eventQueue = new EventQueue();
+		observedArtifacts = new ArrayList<>();		
+	}
+	
+	public Agent(String agentId) {
+		this();
+		this.agentId = agentId;
 		agentArch = new AgentArchitecture(this, eventQueue); 	
 	}
 
 	public Agent(String agentId, LlmClient client) {
+		this();
 		this.agentId = agentId;
-		eventQueue = new EventQueue();
 		agentArch = new AgentArchitecture(this, eventQueue, client); 	
 	}
 	
@@ -38,6 +48,28 @@ public class Agent {
 	public void forceObserving(String artifactId) {
 		workspace.startObserving(this, artifactId);
 	}
+	
+    public void addObservedArtifact(Artifact artifact) {
+    	observedArtifacts.add(artifact);
+    	notifyNewPercept(Percept.focusChanged(artifact.id(), true));
+    }
+    
+    public List<Artifact> getObservedArtifacts(){
+    	return observedArtifacts;
+    }
+
+    public void removeObservedArtifact(Artifact artifact) {
+    	var it = observedArtifacts.iterator();
+    	while (it.hasNext()) {
+    		var ar = it.next();
+    		if (ar.id().equals(artifact.id())) {
+    			it.remove();
+    	    	notifyNewPercept(Percept.focusChanged(ar.id(), false));
+    			break;
+    		}
+    	}
+    }
+	
 	
 	public void doYourJobAndSelfEvaluate(int cyclesBudget) throws Exception {
 		for (int i = 0; i < cyclesBudget; i++) {

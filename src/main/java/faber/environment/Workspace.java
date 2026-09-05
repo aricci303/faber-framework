@@ -44,8 +44,6 @@ import faber.agent.Agent;
 public final class Workspace {
 
     private final Map<String, String> availableArtifacts = new LinkedHashMap<>();
-    private final Set<String> observed = new LinkedHashSet<>();
-    // private final Set<String> alwaysObserved = new LinkedHashSet<>();
     private final Map<String, Manual> manualsByType = new LinkedHashMap<>();
     private final Map<String, ArtifactFactory> factoriesByType = new LinkedHashMap<>();
     private final Map<String, Artifact> instances = new LinkedHashMap<>();
@@ -105,13 +103,6 @@ public final class Workspace {
         if (workspaceArtifact != null) workspaceArtifact.notifyArtifactJoined(id, type);
     }
 
-    /** Like provision(), but the artifact is observed from the moment it exists — see class doc. */
-    /*
-    public void provisionAlwaysObserved(String id, String type, Artifact instance) {
-        provision(id, type, instance);
-        observed.add(id);
-        alwaysObserved.add(id);
-    }*/
 
     public Artifact create(String type, String proposedId, JSONObject  ctorArgs) {
         Manual manual = manualsByType.get(type);
@@ -131,9 +122,11 @@ public final class Workspace {
     	availableArtifacts.remove(artifactId);
         var artifact = instances.remove(artifactId);
         artifact.dispose();
+        if (workspaceArtifact != null) {
+        	workspaceArtifact.notifyArtifactLeft(artifactId);
+        }
     	for (var ag: joinedAgents) {
     		ag.notifyFailureForDisposedArtifactPendingOps(artifactId);
-        if (workspaceArtifact != null) workspaceArtifact.notifyArtifactLeft(artifactId);
     	}
     }
 
@@ -141,24 +134,20 @@ public final class Workspace {
         if (!availableArtifacts.containsKey(artifactId)) {
             throw new IllegalArgumentException("Cannot observe an artifact not in the workspace: " + artifactId);
         }
-        if (observed.add(artifactId)) {
-        	var artifact = instances.get(artifactId);
-        	artifact.addObserverAgent(who);
-        }
+        var artifact = instances.get(artifactId);
+        artifact.addObserverAgent(who);
+        who.addObservedArtifact(artifact);
     }
 
     public void stopObserving(Agent who, String artifactId) {
-        /*
-    	if (alwaysObserved.contains(artifactId)) {
-            throw new IllegalArgumentException("cannot stop observing an always-observed artifact: " + artifactId);
-        }*/
-        if (observed.remove(artifactId)) {
-        	var artifact = instances.get(artifactId);
-        	artifact.removeObserverAgent(who.getAgentId());
-        }
+       var artifact = instances.get(artifactId);
+       if (artifact != null) {
+    	   artifact.removeObserverAgent(who.getAgentId());
+           who.removeObservedArtifact(artifact);
+       }
     }
 
-    public boolean isObserving(String id) { return observed.contains(id); }
+    // public boolean isObserving(String id) { return observed.contains(id); }
     public boolean contains(String id) { return availableArtifacts.containsKey(id); }
     public String typeOf(String id) { return availableArtifacts.get(id); }
     public Manual manualFor(String type) { return manualsByType.get(type); }
@@ -172,7 +161,7 @@ public final class Workspace {
     	executor.shutdown();
     }
     
-    public String toContextBlock() {
+    public String toContextBlock(Agent ag) {
         StringBuilder sb = new StringBuilder();
         sb.append("available artifacts:\n");
         if (availableArtifacts.isEmpty()) {
@@ -183,20 +172,17 @@ public final class Workspace {
             }
         }
         sb.append("observed artifacts:\n");
-        if (observed.isEmpty()) {
-            sb.append("  (none)\n");
-        } else {
-            for (String id : observed) {
-                Artifact instance = instances.get(id);
+        
+        for (var instance: ag.getObservedArtifacts()) {
                 Map<String, Object> props = instance == null ? Map.of() : instance.currentObsProperties();
-                sb.append("  - id: \"").append(id).append("\"");
+                sb.append("  - id: \"").append(instance.id()).append("\"");
                 if (props.isEmpty()) {
                     sb.append("\n");
                 } else {
                     sb.append(", current properties: ").append(props).append("\n");
                 }
-            }
         }
+
         sb.append("manuals:\n");
         Set<String> typesPresent = new LinkedHashSet<>(availableArtifacts.values());
         boolean anyShown = false;
