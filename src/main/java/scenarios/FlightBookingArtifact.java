@@ -30,6 +30,7 @@ public final class FlightBookingArtifact extends Artifact {
 
     private final Map<String, String> bookings = new LinkedHashMap<>(); // booking_id -> "origin-destination-date"
     private int idCounter = 0;
+    private JSONObject lastRequest = null;
 
     public FlightBookingArtifact(String id, Workspace workspace) {
         super(id, workspace);
@@ -43,23 +44,49 @@ public final class FlightBookingArtifact extends Artifact {
                 String origin = params.getString("origin");
                 String destination = params.getString("destination");
                 String date = params.getString("date");
+
                 if (UNAVAILABLE_DATE.equals(date)) {
+                    recordRequest(origin, destination, date, "failed", null);
                     throw new IllegalStateException(
                             "no seats available on " + date + " for " + origin + "-" + destination
                             + " — try list_available_dates for alternatives");
                 }
                 String bookingId = "flight-" + (++idCounter);
                 bookings.put(bookingId, origin + "-" + destination + "-" + date);
+                recordRequest(origin, destination, date, "confirmed", bookingId);
                 return List.of(bookingId, date);
             }
             case "list_available_dates": {
                 String origin = params.getString("origin");
                 String destination = params.getString("destination");
-                return List.of(origin, destination,new JSONArray(ALTERNATIVE_DATES));
+                return List.of(origin, destination, new JSONArray(ALTERNATIVE_DATES));
             }
             default:
                 throw new IllegalArgumentException("unknown operation: " + operationName);
         }
+    }
+
+    /**
+     * Belief-mapped, exactly like EmailArtifact.inbox_count and
+     * AlarmArtifact.fired_alarms — the true current value maintained
+     * unconditionally, visible in WORKSPACE for as long as the agent is
+     * observing this artifact. This exists specifically because
+     * origin/destination were previously only ever visible as part of a
+     * single cycle's own operation_started/failed percept — gone from
+     * context the moment that cycle passed, which is exactly the gap
+     * that matters here: the retry after a failure often happens many
+     * cycles later, once the user replies with an alternative date, not
+     * in the very next cycle.
+     */
+    private void recordRequest(String origin, String destination, String date, String status, String bookingId) {
+        JSONObject newRequest = new JSONObject();
+        newRequest.put("origin", origin);
+        newRequest.put("destination", destination);
+        newRequest.put("date", date);
+        newRequest.put("status", status);
+        if (bookingId != null) newRequest.put("booking_id", bookingId);
+        notifyObsPropertyChanged("last_request", lastRequest, newRequest);
+        lastRequest = newRequest;
     }
 
     public static Manual manual() {
@@ -67,7 +94,10 @@ public final class FlightBookingArtifact extends Artifact {
                 "FlightBooking",
                 "search and book flights",
                 null, null,
-                List.of(),
+                List.of(new Param("last_request",
+                        "origin, destination, date, and status (confirmed or failed) of the most "
+                        + "recently requested booking — check this before retrying rather than relying "
+                        + "on your own memory of a prior request, especially after any delay")),
                 List.of(),
                 List.of(
                         new Operation("book_flight(origin, destination, date)",
