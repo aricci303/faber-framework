@@ -384,12 +384,7 @@ artifact_signal, and the rest all take artifact_id first) — so there is
 one consistent name for "which artifact" across the whole vocabulary,
 not a different one on the action side. For the INVOKE kind, when invoking
 an operation with no parameters, the "<name>" string specified for
-the "operation_name" should not end with "()". Check carefully that 
-the JSON object used to specify parameters is correct, for instance:
-it should not contain double quote for wrapping strings inside text
-values (use single quote instead). For instance: 
-- wrong: { "planned_action":  "invoke forward_email(recipients=["johndoe@example.com"]) on email-01") }, correct: { "planned_action":  "invoke forward_email(recipients=['johndoe@example.com']) on email-01")
-- wrong: { "parameters": { "text", "This is a "quoted" message" }}, correct: { "parameters": { "text", "This is a 'quoted' message" }}
+the "operation_name" should not end with "()". 
 
 
 Structure of your output, every turn:

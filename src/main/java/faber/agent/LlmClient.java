@@ -26,8 +26,8 @@ public interface LlmClient {
 
         @Override
         public String plan(String systemPrompt, String context) throws IOException, InterruptedException {
-            String escapedSystem = escape(systemPrompt);
-            String escapedUser = escape(context);
+            //String escapedSystem = escape(systemPrompt);
+            //String escapedUser = escape(context);
             
             var client = AnthropicOkHttpClient.fromEnv();
             			// AnthropicOkHttpClient.builder().apiKey(apiKey).build();
@@ -37,8 +37,8 @@ public interface LlmClient {
             com.anthropic.models.messages.MessageCreateParams params = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(8192)
-                .system(escapedSystem)
-                .addUserMessage(escapedUser)
+                .system(systemPrompt)
+                .addUserMessage(context)
                 .build();            
                         
             Message message = null;
@@ -55,7 +55,7 @@ public interface LlmClient {
             	
             for (var block : message.content()) {
                 if (block.text().isPresent()) {
-                	var text = unescape(block.text().get().text());
+                	var text = block.text().get().text();
                     System.out.println("--------------------- OUTPUT FROM THE MODEL: \n" + text + "\n---------------------\n");
                 	return text; 
                 }
@@ -74,6 +74,7 @@ public interface LlmClient {
         
         }
 
+        /*
         private static String escape(String s) {
             return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
         }
@@ -81,5 +82,6 @@ public interface LlmClient {
         private static String unescape(String s) {
             return s.replace("\\n", "\n").replace("\\\"", "\"").replace("\\\\", "\\");
         }
+        */
     }
 }
