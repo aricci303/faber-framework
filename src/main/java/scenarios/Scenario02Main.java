@@ -7,11 +7,9 @@ import faber.agent.LlmClient;
 import faber.environment.Workspace;
 
 /**
- * Runs Stage 0 for real, updated for the operation_started refinement:
- * cycle 3 (WAIT) now genuinely perceives operation_started before the
- * operation resolves, rather than seeing an empty percept set — a
- * direct, visible consequence of closing the gap where op_id was
- * previously never communicated before its resolution.
+ * 
+ * Scenario 02 - implementing ARE tutorial scenario
+ * 
  */
 public final class Scenario02Main {
 

@@ -63,14 +63,24 @@ public final class Workspace {
     public void initDefaultArtifacts() {
         // WorkspaceArtifact first, then registered, so subsequent provisions are notified — see
         // Workspace's class doc for why this one specifically needs to go first.
-        registerType(WorkspaceArtifact.manual(), null);
+        
+    	/* workspace artifact, to manage artifacts inside the workspace */  
+    	 
+    	registerType(WorkspaceArtifact.manual(), null);
         workspaceArtifact = new WorkspaceArtifact("workspace-01", this);
         provision("workspace-01", "Workspace", workspaceArtifact);
 
+        /* user-console artifact, to interact with the user */
+        
         registerType(UserConsoleArtifact.manual(), null);
         userConsole = new UserConsoleArtifact("user-console-01", this);
         provision("user-console-01", "UserConsole", userConsole);    	
-        // provisionAlwaysObserved("user-console-01", "UserConsole", userConsole);    	
+
+        /* alarm artifact, to manage time */
+        
+        registerType(AlarmArtifact.manual(), null);
+        AlarmArtifact alarm = new AlarmArtifact("alarm-01", this);
+        provision("alarm-01", "Alarm", alarm);
     }
         
     public UserConsoleArtifact getUserConsole() {

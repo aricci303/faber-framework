@@ -16,11 +16,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Runs Stage 0 for real, updated for the operation_started refinement:
- * cycle 3 (WAIT) now genuinely perceives operation_started before the
- * operation resolves, rather than seeing an empty percept set — a
- * direct, visible consequence of closing the gap where op_id was
- * previously never communicated before its resolution.
+ * 
+ * Simple example showing a faber agent working with a simple artifact (a simple counter).
+ * 
  */
 public final class Main {
 

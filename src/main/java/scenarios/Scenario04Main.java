@@ -28,10 +28,6 @@ public final class Scenario04Main {
         MessagingArtifact messaging = new MessagingArtifact("messaging-01", workspace);
         workspace.provision("messaging-01", "MessagingApp", messaging);
 
-        workspace.registerType(AlarmArtifact.manual(), null);
-        AlarmArtifact alarm = new AlarmArtifact("alarm-01", workspace);
-        workspace.provision("alarm-01", "Alarm", alarm);
-
         Agent agent = new Agent("agent-0");
         agent.init(workspace);
 
