@@ -1,9 +1,7 @@
 package scenarios;
 
 import java.io.File;
-
 import faber.agent.Agent;
-import faber.agent.LlmClient;
 import faber.environment.Workspace;
 
 /**

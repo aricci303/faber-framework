@@ -1,9 +1,6 @@
- package scenarios;
-
-import java.util.concurrent.atomic.AtomicInteger;
+package scenarios;
 
 import faber.agent.Agent;
-import faber.agent.LlmClient;
 import faber.environment.Workspace;
 
 /**

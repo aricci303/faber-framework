@@ -1,8 +1,6 @@
 package scenarios;
 
 import faber.agent.Agent;
-import faber.agent.LlmClient;
-import faber.environment.AlarmArtifact;
 import faber.environment.Workspace;
 
 /**
