@@ -7,15 +7,10 @@ import java.util.concurrent.ExecutorService;
 import org.json.JSONObject;
 
 /**
- * Replaces the ad hoc REPLY action and USER_MESSAGE percept type. The
- * gap this closes: REPLY had no correlation id and no operation_started/
- * completed/failed, so the agent had no way to tell, from context alone,
- * whether it had already replied — exactly the repeated-reply bug this
- * change was proposed to fix. As an ordinary operation on an artifact,
- * it now gets the same tracking every other operation already has.
- *
- * Must be provisioned via Workspace.provisionAlwaysObserved — see that
- * method's doc for why this one specifically can't use ordinary FOCUS.
+ * 
+ * Artifact providing functionalities to interact with the user (in chatbot like scenarios)
+ * 
+ * By default, there is one instance of this kind of artifact in every workspace. 
  */
 public final class UserConsoleArtifact extends Artifact {
 

@@ -8,21 +8,12 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Replaces the ad hoc CREATE_ARTIFACT/DISPOSE_ARTIFACT action kinds
- * with ordinary operations, and the bespoke artifact_joined/
- * artifact_left percept types with ordinary FOCUS-gated signals —
- * applying the same uniformity move as UserConsoleArtifact one level
- * further: "every action with an effect on the environment is an
- * operation of an artifact" now covers workspace membership itself,
- * not just domain-specific artifacts. Unlike UserConsole, this one
- * needs no always-observed exception: membership is always visible in
- * WORKSPACE's own context block regardless of whether anyone is
- * observing this artifact's signal stream — see Workspace's class doc.
- *
- * Must be provisioned, then registered via
- * Workspace.registerWorkspaceArtifact, before any other artifact is
- * provisioned — otherwise earlier joins won't be notified (harmless:
- * they're still fully visible in WORKSPACE, just not as a signal).
+ * 
+ * Artifact providing functionalities to manage the workspace
+ * - creating new artifacts
+ * - disposing existing artifacts
+ * 
+ * By default, there is one instance of this kind of artifact in every workspace. 
  */
 public final class WorkspaceArtifact extends Artifact {
 

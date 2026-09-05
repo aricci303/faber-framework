@@ -9,23 +9,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.json.JSONObject;
 
 /**
- * Models time perception as an ordinary artifact, rather than a
- * harness-level ad hoc mechanism (a bespoke wait_timeout percept). The
- * reasoning: there is no unmediated perception of time for any situated
- * cognitive system — biological or artificial — only perception
- * mediated by something (a clock, a heartbeat, an artifact). set_alarm
- * schedules asynchronously and returns immediately, confirming
- * acceptance via the ordinary operation_started/operation_completed
- * sequence; the actual firing happens later, on its own schedule.
- *
- * Firing follows the same dual pattern already used for
- * EmailArtifact.inbox_count: fired_alarms is a belief-mapped observable
- * property (the true current count, visible immediately to an agent
- * that starts observing late, exactly like an unread inbox) and
- * alarm_fired is a signal (for immediate reaction if actively
- * watching at the moment of firing). No always-observed exception is
- * needed — a missed firing is recoverable the moment the agent next
- * focuses on this artifact, the same way a missed email is.
+ * 
+ * Artifact providing functionalities to manage time 
+ * - setting alarms
+ * - listing fired alarms
+ *  
+ * By default, there is one instance of this kind of artifact in every workspace. 
  */
 public final class AlarmArtifact extends Artifact {
 
