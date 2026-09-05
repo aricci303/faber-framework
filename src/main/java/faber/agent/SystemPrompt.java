@@ -112,8 +112,7 @@ Each time you are invoked, your context will contain, in this order:
      types with no signals, or operations with no output values.
 
      A manual's full JSON is given the first time its type appears in your
-     workspace. After that, it will not be repeated unless it changes —
-     refer to the type by name and rely on what you were already shown.
+     workspace.
 
      Example manual for the "BoundedCounter" type:
        {

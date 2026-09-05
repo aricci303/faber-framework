@@ -47,7 +47,6 @@ public final class Workspace {
     private final Map<String, Manual> manualsByType = new LinkedHashMap<>();
     private final Map<String, ArtifactFactory> factoriesByType = new LinkedHashMap<>();
     private final Map<String, Artifact> instances = new LinkedHashMap<>();
-    private final Set<String> manualsAlreadyShown = new LinkedHashSet<>();
     private WorkspaceArtifact workspaceArtifact; // null until registered, see class doc
     private UserConsoleArtifact userConsole;
     private ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -174,28 +173,21 @@ public final class Workspace {
         sb.append("observed artifacts:\n");
         
         for (var instance: ag.getObservedArtifacts()) {
-                Map<String, Object> props = instance == null ? Map.of() : instance.currentObsProperties();
-                sb.append("  - id: \"").append(instance.id()).append("\"");
-                if (props.isEmpty()) {
-                    sb.append("\n");
-                } else {
-                    sb.append(", current properties: ").append(props).append("\n");
-                }
+        	Map<String, Object> props = instance == null ? Map.of() : instance.currentObsProperties();
+            sb.append("  - id: \"").append(instance.id()).append("\"");
+            if (props.isEmpty()) {
+            	sb.append("\n");
+            } else {
+            	sb.append(", current properties: ").append(props).append("\n");
+            }
         }
 
         sb.append("manuals:\n");
         Set<String> typesPresent = new LinkedHashSet<>(availableArtifacts.values());
-        boolean anyShown = false;
         for (String type : typesPresent) {
-            if (!manualsAlreadyShown.contains(type)) {
-                sb.append(manualsByType.get(type).toJson()).append("\n");
-                manualsAlreadyShown.add(type);
-                anyShown = true;
-            }
+            sb.append(manualsByType.get(type).toJson()).append("\n");
         }
-        if (!anyShown) {
-            sb.append("  (all manuals for present types already shown in a prior cycle)\n");
-        }
+        
         return sb.toString();
     }
 }
