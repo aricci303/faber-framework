@@ -15,6 +15,35 @@ public final class PlanResult {
 
     public enum ActionKind { INVOKE, WAIT, FOCUS, STOP_OBSERVING }
 
+    /**
+     * One entry of "additional_goals" — a commitment recognized this
+     * cycle but not the one driving this cycle's action. Deliberately
+     * the same shape as "goal" itself, just plural: this exists because
+     * a single cycle's perception can imply more than one distinct
+     * goal (two user messages arriving together, each implying its own
+     * commitment) while only one action can be taken this cycle. Left
+     * in prose, the others are silently lost the moment narrative
+     * moves on — the identical failure shape as manuals and origin
+     * tracking eroding across many cycles, just triggered by several
+     * simultaneous implications in one cycle instead.
+     */
+    public static final class AdditionalGoal {
+        public final String id;
+        public final String content;
+        public final String status;
+        public final String pendingTriggerCondition;
+        public final String pendingTriggerPlannedAction;
+
+        AdditionalGoal(String id, String content, String status,
+                       String pendingTriggerCondition, String pendingTriggerPlannedAction) {
+            this.id = id;
+            this.content = content;
+            this.status = status;
+            this.pendingTriggerCondition = pendingTriggerCondition;
+            this.pendingTriggerPlannedAction = pendingTriggerPlannedAction;
+        }
+    }
+
     public final String stateOfMind;
     public final ActionKind kind;
     public final JSONObject action;
@@ -23,10 +52,12 @@ public final class PlanResult {
     public final String goalStatus;
     public final String pendingTriggerCondition;
     public final String pendingTriggerPlannedAction;
+    public final java.util.List<AdditionalGoal> additionalGoals;
 
     private PlanResult(String stateOfMind, ActionKind kind, JSONObject action,
                         String goalId, String goalContent, String goalStatus,
-                        String pendingTriggerCondition, String pendingTriggerPlannedAction) {
+                        String pendingTriggerCondition, String pendingTriggerPlannedAction,
+                        java.util.List<AdditionalGoal> additionalGoals) {
         this.stateOfMind = stateOfMind;
         this.kind = kind;
         this.action = action;
@@ -35,6 +66,7 @@ public final class PlanResult {
         this.goalStatus = goalStatus;
         this.pendingTriggerCondition = pendingTriggerCondition;
         this.pendingTriggerPlannedAction = pendingTriggerPlannedAction;
+        this.additionalGoals = additionalGoals;
     }
 
     private static final Pattern SOM = Pattern.compile("<state_of_mind>(.*?)</state_of_mind>", Pattern.DOTALL);
@@ -93,8 +125,26 @@ public final class PlanResult {
 	        }
         }
 
+        java.util.List<AdditionalGoal> additionalGoals = new java.util.ArrayList<>();
+        if (parsed.has("additional_goals")) {
+            org.json.JSONArray arr = parsed.getJSONArray("additional_goals");
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject g = arr.getJSONObject(i);
+                String id = (String) g.get("id");
+                String content = g.has("content") ? (String) g.get("content") : null;
+                String status = g.has("status") ? (String) g.get("status") : null;
+                String cond = null, plannedAction = null;
+                if (g.has("pending_trigger")) {
+                    JSONObject t = g.getJSONObject("pending_trigger");
+                    cond = (String) t.get("condition");
+                    plannedAction = (String) t.get("planned_action");
+                }
+                additionalGoals.add(new AdditionalGoal(id, content, status, cond, plannedAction));
+            }
+        }
+
         return new PlanResult(som, kind, parsed, goalId, goalContent, goalStatus,
-                pendingTriggerCondition, pendingTriggerPlannedAction);
+                pendingTriggerCondition, pendingTriggerPlannedAction, additionalGoals);
     }
 
     public String getString(String key) { 

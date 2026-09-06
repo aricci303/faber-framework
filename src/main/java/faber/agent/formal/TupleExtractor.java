@@ -40,6 +40,18 @@ public interface TupleExtractor {
                 ledger.resolveGoal(action.goalId, action.goalStatus);
             }
 
+            // Goals recognized this cycle but not driving this cycle's action — registered exactly
+            // like the main goal, but deliberately left out of G/Relation below: only the one goal
+            // actually justifying this cycle's action counts as this cycle's means-end relation.
+            for (PlanResult.AdditionalGoal ag : action.additionalGoals) {
+                if (ag.id == null) continue;
+                if (!ledger.isRegistered(ag.id)) {
+                    ledger.registerOrGet(ag.id, ag.content);
+                }
+                ledger.registerTrigger(ag.id, ag.pendingTriggerCondition, ag.pendingTriggerPlannedAction);
+                ledger.resolveGoal(ag.id, ag.status);
+            }
+
             Relation r = action.goalId != null ? Relation.MEANS_END : Relation.REACTIVE;
 
             

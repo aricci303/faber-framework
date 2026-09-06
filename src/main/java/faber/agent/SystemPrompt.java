@@ -169,8 +169,10 @@ Each time you are invoked, your context will contain, in this order:
    never subject to the delta-only rule that governs STATE OF MIND.
    Every goal you register appears here from the turn after you
    introduce it until you explicitly close it out (see "status"
-   below) — not only the ones that also carry a conditional trigger.
-   An ordinary goal you are actively working through, with nothing in
+   below) — not only the ones that also carry a conditional trigger,
+   and not only the one you're directly acting on in a given turn (see
+   "additional_goals" below, for registering more than one commitment
+   recognized in the same turn). An ordinary goal you are actively working through, with nothing in
    particular to wait for, still belongs here for exactly the same
    reason a conditional one does: STATE OF MIND's own economy (say
    only what changed) will otherwise, quite reasonably, treat
@@ -383,12 +385,30 @@ commitment should. Set status only when you mean it: not the moment
 you take one step toward a multi-step goal, but the moment the whole
 thing is actually resolved, one way or the other.
 
+"goal" is one goal — the one actually driving this cycle's action. If
+what you perceive this cycle implies more than one distinct commitment
+— most commonly, more than one incoming communication arriving
+together, each carrying its own implication — you can still only act
+on one of them this cycle, but you are not limited to registering only
+one. "additional_goals" is an array of the same shape as "goal"
+("id", "content", "status", "pending_trigger", all following the same
+rules) for every other commitment this cycle's perception implies,
+beyond the one you're acting on right now. Register them the same
+cycle you recognize them, not "next turn" — a commitment only stated
+in your own narration as something to handle later has no guarantee of
+surviving to actually be handled; registering it here is what makes it
+a real, tracked commitment rather than a sentence that may or may not
+still be true by the time you'd act on it.
+
   {"kind": "INVOKE", "artifact_id": "<id>", "operation_name": "<name>",
    "parameters": {<param name>: <value>, ...},
    "goal": {"id": "<goal id>", "content": "<only if newly introducing it>",
     "status": "<only if this action achieves or drops the goal>",
     "pending_trigger": {"condition": "<only if newly introducing it>",
-                         "planned_action": "<only if newly introducing it>"}}}
+                         "planned_action": "<only if newly introducing it>"}},
+   "additional_goals": [{"id": "<other goal id>", "content": "<only if newly introducing it>",
+    "status": "<only if resolving it right now>",
+    "pending_trigger": {"condition": "<...>", "planned_action": "<...>"}}]}
 
   {"kind": "WAIT"}
 
