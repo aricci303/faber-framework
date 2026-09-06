@@ -51,7 +51,7 @@ public final class Scenario02Main {
         scenarioDriver.setDaemon(true);
         scenarioDriver.start();
         
-        agent.doYourJobAndSelfEvaluate(10);
+        agent.doYourJobAndSelfEvaluate(20);
         workspace.shutdown();
     }
 }

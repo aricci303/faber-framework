@@ -34,6 +34,7 @@ public final class Main {
         
         Agent agent = new Agent("agent-0");
         // Agent agent = new Agent("agent-0", new MockLlmClient());
+        // agent.enableCycleDumpLogging(false);
         agent.init(workspace);
         
         var userConsole = workspace.getUserConsole();   

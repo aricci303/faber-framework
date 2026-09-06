@@ -25,7 +25,7 @@ public final class UserConsoleArtifact extends Artifact {
         switch (operationName) {
             case "send_msg_to_user": {
                 String text = params.getString("text");
-                System.out.println("[USER SEES] " + text); // stand-in for real delivery in this sketch
+                System.out.println("[MSG TO USER] " + text); // stand-in for real delivery in this sketch
                 return List.of();
             }
             default:
@@ -35,6 +35,7 @@ public final class UserConsoleArtifact extends Artifact {
 
     /** Called by the harness or scenario driver to simulate an incoming user message. */
     public void simulateIncomingMessage(String text) {
+        System.out.println("[MSG FROM USER] " + text); // stand-in for real delivery in this sketch
         emitSignal("message_from_user", List.of(text));
     }
 

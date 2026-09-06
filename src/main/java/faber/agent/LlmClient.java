@@ -27,7 +27,7 @@ public interface LlmClient {
         public String plan(String systemPrompt, String context) throws IOException, InterruptedException {
             var client = AnthropicOkHttpClient.fromEnv();
 
-            System.out.println("--------------------- CONTEXT: \n"+ context+"\n---------------------\n");
+            // System.out.println("--------------------- CONTEXT: \n"+ context+"\n---------------------\n");
             
             com.anthropic.models.messages.MessageCreateParams params = MessageCreateParams.builder()
                 .model(model)
@@ -51,7 +51,7 @@ public interface LlmClient {
             for (var block : message.content()) {
                 if (block.text().isPresent()) {
                 	var text = block.text().get().text();
-                    System.out.println("--------------------- OUTPUT FROM THE MODEL: \n" + text + "\n---------------------\n");
+                    // System.out.println("--------------------- OUTPUT FROM THE MODEL: \n" + text + "\n---------------------\n");
                 	return text; 
                 }
             }

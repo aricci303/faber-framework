@@ -16,10 +16,12 @@ public class Agent {
 	private String apiKey, llmModel;
 	private Workspace workspace;
 	private ArrayList<Artifact> observedArtifacts;
+	private boolean logCycle;
 
 	protected Agent() {
 		eventQueue = new EventQueue();
 		observedArtifacts = new ArrayList<>();		
+		logCycle = true;
 	}
 	
 	public Agent(String agentId) {
@@ -70,17 +72,27 @@ public class Agent {
     	}
     }
 	
+    public void enableCycleDumpLogging(boolean enable) {
+    	logCycle = enable;
+    }
 	
 	public void doYourJobAndSelfEvaluate(int cyclesBudget) throws Exception {
 		for (int i = 0; i < cyclesBudget; i++) {
-         	System.out.println("=== cycle " + agentArch.getNextCycleToRun() + " ===");            
+         	if (logCycle) {
+         		System.out.println("=== cycle " + agentArch.getNextCycleToRun() + " ===");            
+         	}
             agentArch.runOneCycle();            
-            var result = agentArch.getLastCycleResult();
-            System.out.println("[state_of_mind] " + result.plan().stateOfMind);
-            System.out.println("[tuple] " + result.tuple());
-            System.out.println("[WF] pass=" + result.wf().pass + " " + result.wf().violations);
-            System.out.println("[Coherence] pass=" + result.coherence().pass + " " + result.coherence().notes);
-            System.out.println();
+         	if (logCycle) {
+	            System.out.println("*** ENVIRONMENT   ***\n" + agentArch.dumpLightContext());
+	            System.out.println("*** STATE OF MIND ***\n" + agentArch.getLastCycleStateOfMind());    		//
+	            System.out.println("*** ACTION        ***\n" + agentArch.getLastCycleActionDone());
+	            /*
+	            System.out.println("[tuple] " + result.tuple());
+	            System.out.println("[WF] pass=" + result.wf().pass + " " + result.wf().violations);
+	            System.out.println("[Coherence] pass=" + result.coherence().pass + " " + result.coherence().notes);
+	            */
+	            System.out.println();
+         	}
 		}
 		
         PredictiveSufficiencyProtocol.Score score = PredictiveSufficiencyProtocol.run(

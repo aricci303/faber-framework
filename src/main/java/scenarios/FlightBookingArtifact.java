@@ -46,17 +46,19 @@ public final class FlightBookingArtifact extends Artifact {
                 String origin = params.getString("origin");
                 String destination = params.getString("destination");
                 String date = params.getString("date");
+                String seatPreference = params.optString("seat_preference", null);
 
                 if (UNAVAILABLE_DATE.equals(date)) {
-                    recordRequest(origin, destination, date, "failed", null);
+                    recordRequest(origin, destination, date, "failed", null, seatPreference);
                     throw new IllegalStateException(
                             "no seats available on " + date + " for " + origin + "-" + destination
                             + " — try list_available_dates for alternatives");
                 }
                 String bookingId = "flight-" + (++idCounter);
                 bookings.put(bookingId, origin + "-" + destination + "-" + date);
-                recordRequest(origin, destination, date, "confirmed", bookingId);
-                return List.of(bookingId, date);
+                recordRequest(origin, destination, date, "confirmed", bookingId, seatPreference);
+                return List.of(bookingId, date,
+                        seatPreference != null ? seatPreference : "no preference specified");
             }
             case "list_available_dates": {
                 String origin = params.getString("origin");
@@ -80,20 +82,22 @@ public final class FlightBookingArtifact extends Artifact {
      * cycles later, once the user replies with an alternative date, not
      * in the very next cycle.
      */
-    private void recordRequest(String origin, String destination, String date, String status, String bookingId) {
+    private void recordRequest(String origin, String destination, String date, String status,
+                                String bookingId, String seatPreference) {
         JSONObject newRequest = new JSONObject();
         newRequest.put("origin", origin);
         newRequest.put("destination", destination);
         newRequest.put("date", date);
         newRequest.put("status", status);
         if (bookingId != null) newRequest.put("booking_id", bookingId);
+        if (seatPreference != null) newRequest.put("seat_preference", seatPreference);
         notifyObsPropertyChanged("last_request", lastRequest, newRequest);
         lastRequest = newRequest;
     }
 
     public static Manual manual() {
         return new Manual(
-                FlightBookingArtifact.type,
+        		FlightBookingArtifact.type,
                 "search and book flights",
                 null, null,
                 List.of(new Param("last_request",
@@ -102,10 +106,14 @@ public final class FlightBookingArtifact extends Artifact {
                         + "on your own memory of a prior request, especially after any delay")),
                 List.of(),
                 List.of(
-                        new Operation("book_flight(origin, destination, date)",
-                                "book a flight for the given date; fails if no seats are available on that date",
+                        new Operation("book_flight(origin, destination, date, seat_preference)",
+                                "book a flight for the given date; fails if no seats are available on that "
+                                + "date. seat_preference is optional (e.g. \"aisle\", \"window\") — if you "
+                                + "hold a relevant standing preference, pass it explicitly rather than "
+                                + "leaving it out",
                                 List.of(new Param("booking_id", "id of the confirmed booking"),
-                                        new Param("confirmed_date", "the date actually booked"))),
+                                        new Param("confirmed_date", "the date actually booked"),
+                                        new Param("confirmed_seat_preference", "the seat preference actually applied, if any"))),
                         new Operation("list_available_dates(origin,destination)",
                                 "get dates with known availability for from 'origin' to 'destination', useful after a booking failure",
                                 List.of(new Param("dates", "list of available dates")))

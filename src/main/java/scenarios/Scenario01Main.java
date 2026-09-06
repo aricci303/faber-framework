@@ -22,6 +22,7 @@ public final class Scenario01Main {
 
         Agent agent = new Agent("agent-0");
         agent.init(workspace);
+        // agent.enableCycleDumpLogging(false);
 
         var userConsole = workspace.getUserConsole();   
         agent.forceObserving(userConsole.id());
