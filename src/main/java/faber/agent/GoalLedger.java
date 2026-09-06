@@ -4,21 +4,28 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Registry of active goals (Goals), keyed by id, plus — new — pending
- * triggers: a structured, harness-guaranteed representation of "when
- * condition X occurs, do Y", authored once by the model in its own
- * words (condition/plannedAction are free text, exactly like goal
- * content) but echoed back in full every cycle by the harness itself,
- * exempt from the delta-only compression applied to STATE OF MIND.
+ * Registry of active goals (Goals), keyed by id, plus pending triggers:
+ * a structured, harness-guaranteed representation of "when condition X
+ * occurs, do Y", authored once by the model in its own words but
+ * echoed back in full every cycle by the harness itself, exempt from
+ * the delta-only compression applied to STATE OF MIND.
  *
- * This exists because a real run against a live model showed standing
- * conditional commitments eroding across idle cycles: the free
- * narrative correctly treated "nothing changed" as license to stop
- * repeating the plan, and by the time the trigger fired, the plan was
- * gone. The fix is not to instruct the model to try harder to remember
- * — it is to move the one property this content actually needs
- * (guaranteed survival) to the channel already responsible for that
- * job, the same way WORKSPACE and MECHANICAL LOG already are.
+ * Extended to track resolution explicitly. The gap this closes: a goal
+ * registered without an attached trigger — the ordinary case for a
+ * straightforward sequential plan, not one waiting on a future event —
+ * previously had no persistent home anywhere. toContextBlock() only
+ * ever rendered the triggers map, never the goals themselves, so a
+ * committed goal with no trigger was invisible from the cycle after it
+ * was introduced onward — visible only if the model's own narrative
+ * happened to still be carrying it, the exact erosion risk this class
+ * already exists to prevent for triggered goals. In BDI terms: an
+ * intention is meant to remain a standing, aware commitment from the
+ * moment it's adopted until it is achieved or dropped — not only while
+ * it happens to also carry a future-conditional trigger. resolveGoal
+ * gives the agent an explicit, agent-initiated way to close a goal out,
+ * the same discipline as NotebookArtifact.retract_note — nothing here
+ * infers resolution automatically, since that would be guessing at
+ * something only the agent can actually know.
  */
 public final class GoalLedger {
 
@@ -36,6 +43,7 @@ public final class GoalLedger {
 
     private final Map<String, String> goals = new LinkedHashMap<>();
     private final Map<String, PendingTrigger> triggers = new LinkedHashMap<>();
+    private final Map<String, String> resolutions = new LinkedHashMap<>(); // goalId -> "achieved" | "dropped"
 
     public String registerOrGet(String id, String contentIfNew) {
         return goals.computeIfAbsent(id, k -> contentIfNew);
@@ -56,19 +64,50 @@ public final class GoalLedger {
         triggers.remove(goalId);
     }
 
+    /**
+     * Explicit, agent-initiated closure of a goal — "achieved" or
+     * "dropped", per the action's own declared status. Never inferred:
+     * a goal may take several actions and cycles to complete, so no
+     * automatic rule (e.g. "a reply happened") can safely stand in for
+     * the agent's own judgment that it's actually done.
+     */
+    public void resolveGoal(String goalId, String status) {
+        if (goalId != null && status != null) {
+            resolutions.put(goalId, status);
+        }
+    }
+
+    public boolean isActive(String goalId) {
+        return goals.containsKey(goalId) && !resolutions.containsKey(goalId);
+    }
+
     public Map<String, PendingTrigger> pendingTriggers() {
         return triggers;
     }
 
-    /** Renders every unresolved trigger in full — harness-authored context, never compressed. */
+    /**
+     * Renders every currently active goal — not only ones with an
+     * attached trigger — harness-authored context, never compressed.
+     * A goal's own content is shown unconditionally; its trigger, if
+     * one exists, is shown alongside it rather than being the
+     * criterion for whether the goal appears at all.
+     */
     public String toContextBlock() {
-        if (triggers.isEmpty()) return "(none)";
         StringBuilder sb = new StringBuilder();
-        for (PendingTrigger t : triggers.values()) {
-            sb.append("  - goal: ").append(t.goalId)
-              .append(", condition: ").append(t.condition)
-              .append(", planned_action: ").append(t.plannedAction).append('\n');
+        for (Map.Entry<String, String> g : goals.entrySet()) {
+            String goalId = g.getKey();
+            if (resolutions.containsKey(goalId)) continue; // achieved or dropped — no longer ongoing
+
+            sb.append("  - goal: ").append(goalId)
+              .append(", content: ").append(g.getValue());
+
+            PendingTrigger t = triggers.get(goalId);
+            if (t != null) {
+                sb.append(", condition: ").append(t.condition)
+                  .append(", planned_action: ").append(t.plannedAction);
+            }
+            sb.append('\n');
         }
-        return sb.toString().stripTrailing();
+        return sb.length() == 0 ? "(none)" : sb.toString().stripTrailing();
     }
 }

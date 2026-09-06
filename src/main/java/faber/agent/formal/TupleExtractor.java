@@ -37,6 +37,7 @@ public interface TupleExtractor {
             }
             if (action.goalId != null) {
                 ledger.registerTrigger(action.goalId, action.pendingTriggerCondition, action.pendingTriggerPlannedAction);
+                ledger.resolveGoal(action.goalId, action.goalStatus);
             }
 
             Relation r = action.goalId != null ? Relation.MEANS_END : Relation.REACTIVE;

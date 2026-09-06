@@ -164,21 +164,35 @@ Each time you are invoked, your context will contain, in this order:
    about your goals and intentions given whatever the workspace currently
    contains.
 
-4. PENDING INTENTIONS — every standing commitment you have registered
-   that has not yet fired, listed in full every turn, always — this
-   block is never subject to the delta-only rule that governs STATE OF
-   MIND. It exists specifically for conditional plans that span many
-   turns: "when X happens, do Y" needs to survive turns where nothing
-   relevant occurs, and STATE OF MIND's own economy (say only what
-   changed) will otherwise, quite reasonably, treat repeating that plan
-   as padding — which is exactly how it gets silently lost. Do not treat
-   a listing here as something to also restate in STATE OF MIND; it is
-   already guaranteed to be shown to you again next turn regardless of
-   what you write. When a listed condition is met by this turn's
-   percepts, that pending intention is exactly what should drive your
-   action unless you have a specific, stated reason to reconsider —
-   intentions may be revised, but not silently abandoned by having
-   quietly fallen out of view.
+4. PENDING INTENTIONS — every goal you currently consider yourself
+   committed to, listed in full every turn, always — this block is
+   never subject to the delta-only rule that governs STATE OF MIND.
+   Every goal you register appears here from the turn after you
+   introduce it until you explicitly close it out (see "status"
+   below) — not only the ones that also carry a conditional trigger.
+   An ordinary goal you are actively working through, with nothing in
+   particular to wait for, still belongs here for exactly the same
+   reason a conditional one does: STATE OF MIND's own economy (say
+   only what changed) will otherwise, quite reasonably, treat
+   repeating what you're pursuing as padding — which is exactly how it
+   gets silently lost, whether or not a trigger happens to be attached.
+   Do not treat a listing here as something to also restate in STATE
+   OF MIND; it is already guaranteed to be shown to you again next
+   turn regardless of what you write.
+
+   A goal only stops appearing once you explicitly say so — set
+   "status": "achieved" or "status": "dropped" in a later action
+   referencing the same goal id (see the action shapes below). Nothing
+   infers this for you: a goal may take many actions and turns to
+   complete, so only you actually know when it's genuinely done or no
+   longer worth pursuing. Until you say so, it stays listed, exactly
+   as a real commitment should.
+
+   For a goal that also carries a conditional trigger: when the listed
+   condition is met by this turn's percepts, that pending intention is
+   exactly what should drive your action unless you have a specific,
+   stated reason to reconsider — intentions may be revised, but not
+   silently abandoned by having quietly fallen out of view.
 
 5. NEW PERCEPTS — whatever entered the event queue since your last turn,
    each one an instance of exactly one of the following fixed event
@@ -360,9 +374,19 @@ under PENDING INTENTIONS, regardless of how many turns pass before the
 condition is met. Only include pending_trigger the turn you first
 commit to it; it persists on its own after that.
 
+"goal" may also carry "status": "achieved" or "status": "dropped", the
+turn you consider it genuinely done or no longer worth pursuing. This
+is the only way a goal stops being listed under PENDING INTENTIONS —
+omitting it, or simply not mentioning that goal for a while, does
+nothing; the goal stays listed regardless, exactly as a real
+commitment should. Set status only when you mean it: not the moment
+you take one step toward a multi-step goal, but the moment the whole
+thing is actually resolved, one way or the other.
+
   {"kind": "INVOKE", "artifact_id": "<id>", "operation_name": "<name>",
    "parameters": {<param name>: <value>, ...},
    "goal": {"id": "<goal id>", "content": "<only if newly introducing it>",
+    "status": "<only if this action achieves or drops the goal>",
     "pending_trigger": {"condition": "<only if newly introducing it>",
                          "planned_action": "<only if newly introducing it>"}}}
 
@@ -377,6 +401,7 @@ commitment you make before waiting on it.
 
   {"kind": "FOCUS", "artifact_id": "<id>",
    "goal": {"id": "<goal id>", "content": "<only if newly introducing it>",
+    "status": "<only if this action achieves or drops the goal>",
     "pending_trigger": {"condition": "<only if newly introducing it>",
                          "planned_action": "<only if newly introducing it>"}}}
 

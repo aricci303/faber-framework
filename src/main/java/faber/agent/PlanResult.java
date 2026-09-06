@@ -20,17 +20,19 @@ public final class PlanResult {
     public final JSONObject action;
     public final String goalId;
     public final String goalContent;
+    public final String goalStatus;
     public final String pendingTriggerCondition;
     public final String pendingTriggerPlannedAction;
 
     private PlanResult(String stateOfMind, ActionKind kind, JSONObject action,
-                        String goalId, String goalContent,
+                        String goalId, String goalContent, String goalStatus,
                         String pendingTriggerCondition, String pendingTriggerPlannedAction) {
         this.stateOfMind = stateOfMind;
         this.kind = kind;
         this.action = action;
         this.goalId = goalId;
         this.goalContent = goalContent;
+        this.goalStatus = goalStatus;
         this.pendingTriggerCondition = pendingTriggerCondition;
         this.pendingTriggerPlannedAction = pendingTriggerPlannedAction;
     }
@@ -73,13 +75,16 @@ public final class PlanResult {
         }
         ActionKind kind = ActionKind.valueOf(kindRaw.toString());
 
-        String goalId = null, goalContent = null;
+        String goalId = null, goalContent = null, goalStatus = null;
         String pendingTriggerCondition = null, pendingTriggerPlannedAction = null;
         if (parsed.has("goal")) {
 	        JSONObject w = parsed.getJSONObject("goal"); 
 	        goalId = (String) w.get("id");
 	        if (w.has("content")) {
 	        	goalContent = (String) w.get("content");
+		    }
+		    if (w.has("status")) {
+		    	goalStatus = (String) w.get("status");
 		    }
 	        if (w.has("pending_trigger")) {
 	        	JSONObject t = w.getJSONObject("pending_trigger");
@@ -88,7 +93,8 @@ public final class PlanResult {
 	        }
         }
 
-        return new PlanResult(som, kind, parsed, goalId, goalContent, pendingTriggerCondition, pendingTriggerPlannedAction);
+        return new PlanResult(som, kind, parsed, goalId, goalContent, goalStatus,
+                pendingTriggerCondition, pendingTriggerPlannedAction);
     }
 
     public String getString(String key) { 
