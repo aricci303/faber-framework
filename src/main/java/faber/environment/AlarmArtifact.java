@@ -18,11 +18,13 @@ import org.json.JSONObject;
  */
 public final class AlarmArtifact extends Artifact {
 
+	public static final String type = "Alarm";
+
     private final List<String> firedAlarmIds = new ArrayList<>();
     private final AtomicInteger idCounter = new AtomicInteger(0);
 
     public AlarmArtifact(String id, Workspace workspace) {
-        super(id, workspace);
+        super(id, type, workspace);
     }
 
     @Override
@@ -60,7 +62,7 @@ public final class AlarmArtifact extends Artifact {
 
     public static Manual manual() {
         return new Manual(
-                "Alarm",
+                AlarmArtifact.type,
                 "perceive the passage of time by setting alarms that fire later",
                 null, null,
                 List.of(new Manual.Param("fired_alarms", "how many alarms have fired so far")),

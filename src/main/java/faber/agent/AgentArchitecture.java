@@ -3,6 +3,7 @@ package faber.agent;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -140,7 +141,7 @@ public class AgentArchitecture {
 	    private String assembleContext(List<Percept> percepts) {
 	        StringBuilder sb = new StringBuilder();
 	        sb.append("[MECHANICAL LOG]\n").append(mechanicalLog.toContextBlock()).append("\n\n");
-	        sb.append("[WORKSPACE]\n").append(workspace.toContextBlock(agent)).append("\n");
+	        sb.append("[WORKSPACE]\n").append(this.getWorkspaceContextBlock()).append("\n");
 	        sb.append("[PENDING INTENTIONS]\n").append(goalLedger.toContextBlock()).append("\n\n");
 	        sb.append("[STATE OF MIND]\n").append(stateOfMind.current()).append("\n\n");
 	        sb.append("[NEW PERCEPTS]\n");
@@ -264,5 +265,44 @@ public class AgentArchitecture {
 	        }
 	        return false;
 	    }	
+	    
+	    /**
+	     * Get the context block describing the current state of the workspace,
+	     * according to the context schema adopted
+	     * 
+	     * @return
+	     */
+	    private String getWorkspaceContextBlock() {
+	        StringBuilder sb = new StringBuilder();
+	        sb.append("available artifacts:\n");
+	        var availableArtifacts = workspace.getIAvailableArtifacts();
+	        
+	        if (availableArtifacts.isEmpty()) {
+	            sb.append("  (none)\n");
+	        } else {
+	            for (var ar: availableArtifacts) {
+	                sb.append("  - id: \"").append(ar.id()).append("\", type: \"").append(ar.type()).append("\"\n");
+	            }
+	        }
+	        sb.append("observed artifacts:\n");
+	        
+	        for (var instance: agent.getObservedArtifacts()) {
+	        	Map<String, Object> props = instance == null ? Map.of() : instance.currentObsProperties();
+	            sb.append("  - id: \"").append(instance.id()).append("\"");
+	            if (props.isEmpty()) {
+	            	sb.append("\n");
+	            } else {
+	            	sb.append(", current properties: ").append(props).append("\n");
+	            }
+	        }
+
+	        sb.append("manuals:\n");
+            for (var ar: availableArtifacts) {
+	            sb.append(workspace.manualFor(ar.type()).toJson()).append("\n");
+	        }
+	        
+	        return sb.toString();
+	    }
+	    
 	
 }

@@ -28,6 +28,8 @@ import faber.environment.Manual.Signal;
  */
 public final class EmailArtifact extends Artifact {
 
+	public static final String type = "EmailClientApp";
+
     private static final class EmailRecord {
         final String sender, subject, content;
         final File attachment; 
@@ -39,7 +41,7 @@ public final class EmailArtifact extends Artifact {
     private final Map<String, EmailRecord> received = new LinkedHashMap<>();
 
     public EmailArtifact(String id, Workspace workspace) {
-        super(id, workspace);
+        super(id, type, workspace);
     }
 
     @Override
@@ -61,7 +63,7 @@ public final class EmailArtifact extends Artifact {
             case "list_emails": {
                 List<Object> summaries = new ArrayList<>();
                 for (Map.Entry<String, EmailRecord> e : received.entrySet()) {
-                    summaries.add(e.getKey() + ": " + e.getValue().sender + " - " + e.getValue().subject.replaceAll("\"", "'"));
+                    summaries.add(e.getKey() + ": " + e.getValue().sender + " - " + e.getValue().subject + " - attachments: " + e.getValue().attachment);
                 }
                 return List.of(summaries);
             }
@@ -74,7 +76,7 @@ public final class EmailArtifact extends Artifact {
     public void simulateIncomingEmail(String emailId, String sender, String subject, String content, File attachment) {
         System.out.println("NEW INCOMING EMAIL: " + emailId + " from " + sender + " subject: " + subject);
     	int oldCount = received.size();
-        received.put(emailId, new EmailRecord(sender, subject, content.replaceAll("\"", "'"), attachment));
+        received.put(emailId, new EmailRecord(sender, subject, content, attachment));
         notifyObsPropertyChanged("inbox_count", oldCount, received.size());
         if (attachment != null) {
         	emitSignal("email_received", List.of(emailId, sender, subject, content, attachment));
@@ -85,7 +87,7 @@ public final class EmailArtifact extends Artifact {
 
     public static Manual manual() {
         return new Manual(
-                "EmailClientApp",
+                EmailArtifact.type,
                 "send, receive, and forward email",
                 null, null,
                 List.of(new Manual.Param("inbox_count", "how many emails have been received so far")),
@@ -101,7 +103,7 @@ public final class EmailArtifact extends Artifact {
                         "forward a previously received email to new recipients", List.of()),
                     new Manual.Operation("list_emails()",
                         "get sender/subject summaries of every email received so far",
-                        List.of(new Manual.Param("summaries", "list of \"id: sender - subject\" strings")))
+                        List.of(new Manual.Param("summaries", "list of \"id: sender - subject - attachments\" strings")))
 
                 ),
                 null

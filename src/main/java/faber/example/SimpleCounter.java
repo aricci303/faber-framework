@@ -17,10 +17,12 @@ import faber.environment.Manual.Param;
 /** Demo artifact matching the Counter example manual from system-prompt-v2.md. */
 public final class SimpleCounter extends Artifact {
 
-    private int count;
+	public static final String type = "SimpleCounter";
+
+	private int count;
 
     public SimpleCounter(String id, Workspace workspace, int start) {
-        super(id, workspace);
+        super(id, type, workspace);
         this.count = start;
     }
 
@@ -47,7 +49,7 @@ public final class SimpleCounter extends Artifact {
 
     public static Manual manual() {
         return new Manual(
-                "SimpleCounter",
+                SimpleCounter.type,
                 "to count, one by one",
                 "SimpleCounter(start=0)",
                 "creates a new counter, optionally with a starting value",

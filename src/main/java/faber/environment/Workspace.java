@@ -1,6 +1,7 @@
 package faber.environment;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -14,32 +15,9 @@ import org.json.JSONObject;
 import faber.agent.Agent;
 
 /**
- * The WORKSPACE context block: available artifacts, the subset
- * currently observed, and one manual per distinct type — given in full
- * only the first time that type appears. This class is the harness's
- * ground truth; it is never narrated by the model, only referenced.
- *
- * Two mechanisms added this turn, both applying "every action with an
- * effect on the environment is an operation of an artifact" as far as
- * it will go without breaking:
- *
- *   - Always-observed artifacts (see provisionAlwaysObserved) bypass
- *     FOCUS entirely and cannot be targeted by STOP_OBSERVING. This is
- *     specifically for UserConsole: unlike ordinary artifacts, where
- *     missing a signal costs nothing (the WORKSPACE block always shows
- *     current ground truth regardless), the user's first instruction
- *     has no such fallback — it exists only as that one signal. FOCUS
- *     is the right default everywhere else; here it would create a
- *     chicken-and-egg problem (deciding to listen requires already
- *     having heard something).
- *
- *   - A registered WorkspaceArtifact (see registerWorkspaceArtifact) is
- *     notified on every provision()/dispose(), turning artifact_joined
- *     and artifact_left into ordinary FOCUS-gated signals rather than
- *     bespoke, unconditionally-published event types — this one has no
- *     analogous chicken-and-egg problem, since membership itself is
- *     always visible in WORKSPACE regardless of whether the agent is
- *     observing WorkspaceArtifact's own signal stream.
+ * 
+ * Class representing the workspace containing artifacts.
+ * 
  */
 public final class Workspace {
 
@@ -58,6 +36,7 @@ public final class Workspace {
     }
 
     public void initDefaultArtifacts() {
+    	
         // WorkspaceArtifact first, then registered, so subsequent provisions are notified — see
         // Workspace's class doc for why this one specifically needs to go first.
         
@@ -78,6 +57,13 @@ public final class Workspace {
         registerType(AlarmArtifact.manual(), null);
         AlarmArtifact alarm = new AlarmArtifact("alarm-01", this);
         provision("alarm-01", "Alarm", alarm);
+        
+        /* notebook artifact, to hold standing beliefs independent of any goal or plan */
+
+        registerType(NotebookArtifact.manual(), null);
+        NotebookArtifact notebook = new NotebookArtifact("notebook-01", this);
+        provision("notebook-01", "Notebook", notebook);
+        
     }
         
     public UserConsoleArtifact getUserConsole() {
@@ -146,10 +132,24 @@ public final class Workspace {
        }
     }
 
-    // public boolean isObserving(String id) { return observed.contains(id); }
-    public boolean contains(String id) { return availableArtifacts.containsKey(id); }
+    public List<Artifact> getIAvailableArtifacts(){
+    	var col = this.instances.values();
+    	var list = new ArrayList<Artifact>();
+    	for (var ar: col) {
+    		list.add(ar);
+    	}
+    	return list;
+    }
+    
+    public boolean contains(String id) { 
+    	return availableArtifacts.containsKey(id); 
+    }
+    
+    
     public String typeOf(String id) { return availableArtifacts.get(id); }
+    
     public Manual manualFor(String type) { return manualsByType.get(type); }
+
     public Artifact instanceOf(String id) { return instances.get(id); }
 
     public void scheduleOpExecution(Runnable op) {
@@ -160,34 +160,4 @@ public final class Workspace {
     	executor.shutdown();
     }
     
-    public String toContextBlock(Agent ag) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("available artifacts:\n");
-        if (availableArtifacts.isEmpty()) {
-            sb.append("  (none)\n");
-        } else {
-            for (Map.Entry<String, String> e : availableArtifacts.entrySet()) {
-                sb.append("  - id: \"").append(e.getKey()).append("\", type: \"").append(e.getValue()).append("\"\n");
-            }
-        }
-        sb.append("observed artifacts:\n");
-        
-        for (var instance: ag.getObservedArtifacts()) {
-        	Map<String, Object> props = instance == null ? Map.of() : instance.currentObsProperties();
-            sb.append("  - id: \"").append(instance.id()).append("\"");
-            if (props.isEmpty()) {
-            	sb.append("\n");
-            } else {
-            	sb.append(", current properties: ").append(props).append("\n");
-            }
-        }
-
-        sb.append("manuals:\n");
-        Set<String> typesPresent = new LinkedHashSet<>(availableArtifacts.values());
-        for (String type : typesPresent) {
-            sb.append(manualsByType.get(type).toJson()).append("\n");
-        }
-        
-        return sb.toString();
-    }
 }

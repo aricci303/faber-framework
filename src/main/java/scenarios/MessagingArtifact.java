@@ -26,8 +26,10 @@ import faber.environment.Manual.Signal;
  */
 public final class MessagingArtifact extends Artifact {
 
+	public static final String type = "MessagingApp";
+
     public MessagingArtifact(String id, Workspace workspace) {
-        super(id, workspace);
+        super(id, type, workspace);
     }
 
     @Override
@@ -50,7 +52,7 @@ public final class MessagingArtifact extends Artifact {
 
     public static Manual manual() {
         return new Manual(
-                "MessagingApp",
+                MessagingArtifact.type,
                 "send and receive text messages with contacts",
                 null, null,
                 List.of(),

@@ -30,12 +30,14 @@ import faber.agent.Percept;
 public abstract class Artifact {
 
     protected final String id;
+    protected final String type;
     protected final Workspace workspace;
     private final Map<String, Object> obsProperties = new LinkedHashMap<>();
     private ArrayList<Agent> observerAgents;
 
-    protected Artifact(String id, Workspace workspace) {
+    protected Artifact(String id, String type, Workspace workspace) {
         this.id = id;
+        this.type = type;
         this.workspace = workspace;
         // this.eventQueue = eventQueue;
         // this.executor = executor;
@@ -43,6 +45,8 @@ public abstract class Artifact {
     }
 
     public String id() { return id; }
+    
+    public String type() { return type; }
 
     /** Non-blocking: publishes operation_started immediately, then schedules the operation and returns. */
     public final void invoke(Agent requestor, String operationName, JSONObject params, String correlationId) {
@@ -114,7 +118,7 @@ public abstract class Artifact {
     }
 
     /** The true current value of every observable property set so far — queried by Workspace for observed artifacts. */
-    Map<String, Object> currentObsProperties() {
+    public Map<String, Object> currentObsProperties() {
         return obsProperties;
     }
 }

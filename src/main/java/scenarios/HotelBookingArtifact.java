@@ -20,11 +20,13 @@ import faber.environment.Manual.Param;
  */
 public final class HotelBookingArtifact extends Artifact {
 
+	public static final String type = "HotelBooking";
+
     private final Map<String, String> bookings = new LinkedHashMap<>();
     private int idCounter = 0;
 
     public HotelBookingArtifact(String id, Workspace workspace) {
-        super(id, workspace);
+        super(id, type, workspace);
     }
 
     @Override
@@ -46,7 +48,7 @@ public final class HotelBookingArtifact extends Artifact {
 
     public static Manual manual() {
         return new Manual(
-                "HotelBooking",
+        		HotelBookingArtifact.type,
                 "book hotel rooms",
                 null, null,
                 List.of(),

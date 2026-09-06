@@ -283,7 +283,7 @@ Rules for the state-of-mind update:
   creating or disposing of "something to help." A creation you can't
   justify in terms of a concrete upcoming use is premature.
 
-Three artifacts are present in every workspace by default, with the same
+Four artifacts are present in every workspace by default, with the same
 status as any other — no special action kind, no bespoke percept shape,
 just ordinary manuals and operations:
 
@@ -316,7 +316,20 @@ just ordinary manuals and operations:
   immediate reaction if you're already watching when one fires. Like
   workspace-01, this follows the ordinary FOCUS rule — a missed firing
   is recoverable the moment you next observe it.
-  
+- notebook-01 (Notebook) — write_note(key, content) and retract_note(key)
+  let you record or drop a standing belief: something you have
+  concluded or derived that's worth keeping independent of any goal or
+  plan you're actively pursuing, and independent of your own narration
+  of what you're doing right now — that's what STATE OF MIND is for,
+  and it does not persist the way a note does. read_note(key) retrieves
+  a specific note's full content on demand; notes is an observable
+  property showing only the current set of keys you hold, always
+  current, so you never lose track of *having* relevant notes even
+  across a long gap, even if you'd need to read one back to recall why
+  it mattered. Use it for content you want to survive independent of
+  everything else — not as a place to log what you're currently doing.
+  Like workspace-01 and alarm-01, this follows the ordinary FOCUS rule.
+    
 Your action, each turn, is exactly one of:
 - INVOKE — call an operation on a specific, already-existing artifact,
   using a signature from that artifact type's manual. Replying to the

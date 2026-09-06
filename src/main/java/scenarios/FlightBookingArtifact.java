@@ -25,6 +25,8 @@ import faber.environment.Manual.Param;
  */
 public final class FlightBookingArtifact extends Artifact {
 
+	public static final String type = "FlightBooking";
+
     private static final String UNAVAILABLE_DATE = "2026-12-24";
     private static final List<String> ALTERNATIVE_DATES = List.of("2026-12-23", "2026-12-26", "2026-12-27");
 
@@ -33,7 +35,7 @@ public final class FlightBookingArtifact extends Artifact {
     private JSONObject lastRequest = null;
 
     public FlightBookingArtifact(String id, Workspace workspace) {
-        super(id, workspace);
+        super(id, type, workspace);
     }
 
     @Override
@@ -91,7 +93,7 @@ public final class FlightBookingArtifact extends Artifact {
 
     public static Manual manual() {
         return new Manual(
-                "FlightBooking",
+                FlightBookingArtifact.type,
                 "search and book flights",
                 null, null,
                 List.of(new Param("last_request",

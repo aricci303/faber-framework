@@ -17,8 +17,10 @@ import org.json.JSONObject;
  */
 public final class WorkspaceArtifact extends Artifact {
 
+	public static final String type = "Workspace";
+	
     public WorkspaceArtifact(String id, Workspace workspace) {
-        super(id, workspace);
+        super(id, type, workspace);
     }
 
     @Override
@@ -54,7 +56,7 @@ public final class WorkspaceArtifact extends Artifact {
 
     public static Manual manual() {
         return new Manual(
-                "Workspace",
+                WorkspaceArtifact.type,
                 "create and dispose artifacts in this workspace, and observe membership changes",
                 null, null,
                 List.of(),

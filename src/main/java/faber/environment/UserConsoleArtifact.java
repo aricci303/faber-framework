@@ -14,8 +14,10 @@ import org.json.JSONObject;
  */
 public final class UserConsoleArtifact extends Artifact {
 
+	public static final String type = "UserConsole";
+
     public UserConsoleArtifact(String id, Workspace workspace) {
-        super(id, workspace);
+        super(id, type, workspace);
     }
 
     @Override
@@ -38,7 +40,7 @@ public final class UserConsoleArtifact extends Artifact {
 
     public static Manual manual() {
         return new Manual(
-                "UserConsole",
+                UserConsoleArtifact.type,
                 "send messages to, and receive messages from, the user",
                 null, null,
                 List.of(),
