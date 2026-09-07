@@ -11,6 +11,7 @@ import org.json.JSONObject;
 
 import com.anthropic.models.messages.Model;
 
+import faber.agent.LlmClient.LlmCallResult;
 import faber.agent.formal.Coherence;
 import faber.agent.formal.CoreTuple;
 import faber.agent.formal.TupleExtractor;
@@ -33,25 +34,31 @@ public class AgentArchitecture {
 	private TupleExtractor extractor;
 	private StageProfile stageProfile;
 	private List<CoreTuple> tupleTrace;
-
 	private AtomicInteger correlationCounter;
-
 	private CoreTuple previousTuple;
-	private boolean lastCycleCommittedToWait;
 
-	private long nextCycleToRun;
+	private long nextCycleToRun;	
 	private CycleResult lastCycleResult;
-
-	private List<Percept> lastCyclePercepts;
-	private String lastCycleAct;
-
 	
 	private LlmClient llm;
 
-	public static record CycleResult(long cycleNumber, PlanResult plan, CoreTuple tuple, WellFormedness.Result wf,
-			Coherence.Result coherence) {
+	public static record ActResult(
+			String act,
+			boolean committedToWait) {}
+
+	public static record CycleResult(
+			long cycleNumber, 
+			List<Percept> senseResult,
+			String stateOfMind,
+			PlanResult planResult, 
+			ActResult actResult,
+			CoreTuple coreTuple, 
+			WellFormedness.Result wf,
+			Coherence.Result coherence,
+			LlmCallResult llmCallResult) {
 	}
 
+	
 	public AgentArchitecture(Agent agent, EventQueue eventQueue, LlmClient llmClient) {
 		this.eventQueue = eventQueue;
 		this.agent = agent;
@@ -76,10 +83,9 @@ public class AgentArchitecture {
 		correlationCounter = new AtomicInteger(0);
 
 		previousTuple = null;
-		lastCycleCommittedToWait = false;
 		nextCycleToRun = 1;
-		lastCycleResult = null;
-		lastCyclePercepts = null;
+
+		lastCycleResult = new CycleResult(0, new ArrayList<Percept>(), this.getFullStateOfMind(), null, new ActResult("",false), null, null, null, null );	
 	}
 
 	public void notifyFailureForDisposedArtifactPendingOps(String artifactId) {
@@ -89,25 +95,25 @@ public class AgentArchitecture {
 		}
 	}
 
-	public void runOneCycle() throws Exception {
-		lastCyclePercepts = sense();
-		String context = assembleContext(lastCyclePercepts);
+	public CycleResult runOneCycle() throws Exception {
+		var percepts = sense();
+		String context = assembleContext(percepts);
 
-		String raw = llm.plan(SystemPrompt.systemPrompt, context);
-		PlanResult result = PlanResult.parse(raw);
-		stateOfMind.update(result.stateOfMind);
+		var llmCallResult = llm.plan(SystemPrompt.systemPrompt, context);
+		var planResult = PlanResult.parse(llmCallResult.output());
+		stateOfMind.update(planResult.stateOfMind);
 
-		act(result);
-		checkTriggerFidelity(lastCyclePercepts, result);
+		var actResult = act(planResult);
+		checkTriggerFidelity(percepts, planResult);
 
-		CoreTuple tuple = extractor.extract(lastCyclePercepts, result, goalLedger);
+		CoreTuple tuple = extractor.extract(percepts, planResult, goalLedger);
 		if (!stageProfile.relationAllowed(tuple.r)) {
 			throw new IllegalStateException("Relation " + tuple.r + " used but its layer isn't active "
 					+ "in this StageProfile — a layer leaking in without being declared.");
 		}
 
 		Set<String> groundedSource = new LinkedHashSet<>();
-		for (Percept p : lastCyclePercepts)
+		for (Percept p : percepts)
 			groundedSource.add(p.toContextLine());
 		WellFormedness.Result wf = WellFormedness.check(tuple, groundedSource, goalLedger);
 
@@ -116,20 +122,20 @@ public class AgentArchitecture {
 
 		previousTuple = tuple;
 		tupleTrace.add(tuple);
-
-		lastCycleResult = new CycleResult(nextCycleToRun, result, tuple, wf, coherence);
+		
+		lastCycleResult = new CycleResult(nextCycleToRun, percepts, this.getFullStateOfMind(), planResult, actResult,  tuple, wf, coherence, llmCallResult);	
 		nextCycleToRun++;
-
+		return lastCycleResult;
 	}
 
 	public CycleResult getLastCycleResult() {
 		return lastCycleResult;
 	}
 
-	public String getLastCycleStateOfMind() {
+	private String getFullStateOfMind() {
 		StringBuffer sb = new StringBuffer("");
 		sb.append("[PENDING INTENTIONS]\n").append(goalLedger.toContextBlock()).append("\n");
-		sb.append("[MENTAL FLOW]\n").append(stateOfMind.current()).append("\n");
+		sb.append("[STATE OF MIND]\n").append(stateOfMind.current()).append("\n");
 		return sb.toString();
 	}
 
@@ -142,7 +148,7 @@ public class AgentArchitecture {
 	}
 
 	private List<Percept> sense() throws InterruptedException {
-		if (lastCycleCommittedToWait) {
+		if (lastCycleResult.actResult().committedToWait()) {
 			return eventQueue.awaitAtLeastOne(30_000);
 		}
 		return eventQueue.drainAll();
@@ -175,10 +181,11 @@ public class AgentArchitecture {
 		// sb.append("[PENDING INTENTIONS]\n").append(goalLedger.toContextBlock()).append("\n\n");
 		// sb.append("[STATE OF MIND]\n").append(stateOfMind.current()).append("\n\n");
 		sb.append("[NEW PERCEPTS]\n");
-		if (lastCyclePercepts.isEmpty()) {
+		var percepts = lastCycleResult.senseResult();
+		if (percepts.isEmpty()) {
 			sb.append("(none)\n");
 		} else {
-			for (Percept p : lastCyclePercepts) {
+			for (Percept p : percepts) {
 				sb.append("- ").append(p.toContextLine()).append('\n');
 				if (p.type == Percept.Type.OPERATION_COMPLETED || p.type == Percept.Type.OPERATION_FAILED) {
 					mechanicalLog.resolve(p.correlationId);
@@ -188,16 +195,29 @@ public class AgentArchitecture {
 		return sb.toString();
 	}
 	
-	@SuppressWarnings("unchecked")
-	private void act(PlanResult result) {
+	public String dumpLastCyclePlanResultGoals() {
+		StringBuilder sb = new StringBuilder();
+		var planRes = lastCycleResult.planResult(); 
+		sb.append("goal: " + planRes.goalId + "\ncontent: " + planRes.goalContent + "\nstatus: " + planRes.goalStatus);
+		sb.append("\nadditional goals:\n");
+		for (var g: planRes.additionalGoals) {
+			sb.append("- " + g.id + " - trigger: " + g.pendingTriggerCondition + " - action: " + g.pendingTriggerPlannedAction + "\n");			
+		}
+		return sb.toString();
+	}
+	
+	private ActResult act(PlanResult result) {
+		boolean committedToWait = false;
+		String act = ""; 
+		
 		switch (result.kind) {
 		case WAIT:
-			lastCycleCommittedToWait = true;
-			lastCycleAct = "wait";
+			committedToWait = true;
+			act = "wait";
 			break;
 
 		case INVOKE: {
-			lastCycleCommittedToWait = false;
+			committedToWait = false;
 			String artifactId = result.getString("artifact_id");
 			String operation = result.getString("operation_name");
 			JSONObject args = result.getJSONObject("parameters");
@@ -211,39 +231,41 @@ public class AgentArchitecture {
 			String correlationId = newCorrelationId();
 			mechanicalLog.recordInvocation(correlationId, artifactId, operation);
 			target.invoke(agent, operation, args, correlationId); // publishes operation_started itself, synchronously
-			lastCycleAct = "invoke " + artifactId + "." + operation + "(" + args + ")";
+			act = "invoke " + artifactId + "." + operation + "(" + args + ")";
 			break;
 		}
 
 		case FOCUS: {
-			lastCycleCommittedToWait = false;
+			committedToWait = false;
 			String artifactId = result.getString("artifact_id");
 			try {
 				workspace.startObserving(agent, artifactId);
-				lastCycleAct = "focus " + artifactId + ")";
+				act = "focus " + artifactId;
 			} catch (IllegalArgumentException e) {
 				// Pre-existing gap this change would otherwise have walked straight into:
 				// refusing
 				// STOP_OBSERVING on an always-observed artifact needs this same handling, so
 				// FOCUS
 				// gets it too now rather than being allowed to crash the loop on a bad id.
-				lastCycleAct = "focus " + artifactId + " refused - reason: " + e.getMessage();
+				act = "focus " + artifactId + " refused - reason: " + e.getMessage();
 			}
 			break;
 		}
 
 		case STOP_OBSERVING: {
-			lastCycleCommittedToWait = false;
+			committedToWait = false;
 			String artifactId = result.getString("artifact_id");
 			try {
 				workspace.stopObserving(agent, artifactId);
-				lastCycleAct = "stop_observing " + artifactId;
+				act = "stop_observing " + artifactId;
 			} catch (IllegalArgumentException e) {
-				lastCycleAct = "stop_observing" + artifactId + " refused";
+				act = "stop_observing" + artifactId + " refused";
 			}
 			break;
 		}
 		}
+		return new ActResult(act, committedToWait);
+		
 	}
 
 	private String newCorrelationId() {
@@ -362,10 +384,5 @@ public class AgentArchitecture {
 
 		sb.append("manuals: (...) \n");
 		return sb.toString();
-	}
-	
-	public String getLastCycleActionDone() {
-		return this.lastCycleAct;
-	}
-
+	}	
 }

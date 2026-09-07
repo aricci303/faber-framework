@@ -81,16 +81,20 @@ public class Agent {
          	if (logCycle) {
          		System.out.println("=== cycle " + agentArch.getNextCycleToRun() + " ===");            
          	}
-            agentArch.runOneCycle();            
+            var cycleResult = agentArch.runOneCycle();            
          	if (logCycle) {
-	            System.out.println("*** ENVIRONMENT   ***\n" + agentArch.dumpLightContext());
-	            System.out.println("*** STATE OF MIND ***\n" + agentArch.getLastCycleStateOfMind());    		//
-	            System.out.println("*** ACTION        ***\n" + agentArch.getLastCycleActionDone());
-	            /*
-	            System.out.println("[tuple] " + result.tuple());
-	            System.out.println("[WF] pass=" + result.wf().pass + " " + result.wf().violations);
-	            System.out.println("[Coherence] pass=" + result.coherence().pass + " " + result.coherence().notes);
-	            */
+	            System.out.print("*** ENVIRONMENT   ***\n" + agentArch.dumpLightContext());
+	            System.out.print("*** STATE OF MIND ***\n" + cycleResult.stateOfMind());    		//
+	            System.out.println("*** ACTION COMMITTED ***\n" + cycleResult.actResult().act());
+	            System.out.println("*** GOALS IN PLAN RESULT ***");
+	            System.out.print(agentArch.dumpLastCyclePlanResultGoals());
+	            System.out.println("*** LLM CALL ***");
+	            System.out.println("- input tokens: " + cycleResult.llmCallResult().numInputTokens());
+	            System.out.println("- output tokens: " + cycleResult.llmCallResult().numOutputTokens());
+	            System.out.println("*** VALIDATION ***");
+	            System.out.println("[tuple] " + cycleResult.coreTuple());
+	            System.out.println("[WF] pass=" + cycleResult.wf().pass + " " + cycleResult.wf().violations);
+	            System.out.println("[Coherence] pass=" + cycleResult.coherence().pass + " " + cycleResult.coherence().notes);
 	            System.out.println();
          	}
 		}

@@ -37,7 +37,7 @@ public final class Scenario06Main {
         workspace.provision("flight-01", "FlightBooking", flights);
 
         Agent agent = new Agent("agent-0");
-        // agent.enableCycleDumpLogging(false);
+        agent.enableCycleDumpLogging(false);
         agent.init(workspace);
 
         var userConsole = workspace.getUserConsole();

@@ -29,7 +29,9 @@ public interface TupleExtractor {
         @Override
         public CoreTuple extract(List<Percept> perceptsThisCycle, PlanResult action, GoalLedger ledger) {
             Set<String> W = new LinkedHashSet<>();
-            for (Percept p : perceptsThisCycle) W.add(p.toContextLine());
+            for (Percept p : perceptsThisCycle) {
+            	W.add(p.toContextLine());
+            }
 
             String G = action.goalId != null ? action.goalId : CoreTuple.BOTTOM;
             if (action.goalId != null && !ledger.isRegistered(action.goalId)) {

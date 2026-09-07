@@ -87,14 +87,6 @@ public final class PlanResult {
         JSONObject parsed = null;
         String act = actMatcher.group(1).trim();
         
-        /* since it is supposed to be a JSON, some char are now allowed */
-        /*
-        if (act.indexOf("\r") > -1) {
-        	act = act.replaceAll("\r", "");
-        }
-        if (act.indexOf("\n") > -1) {
-        	act = act.replaceAll("\n", "");
-        }*/
         try {
         	parsed = new JSONObject(act);
         } catch (Exception ex) {
