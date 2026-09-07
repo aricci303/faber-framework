@@ -14,7 +14,24 @@ import com.anthropic.models.messages.Model;
 
 public interface LlmClient {
 	
-	public static record LlmCallResult(String output, long numInputTokens, long numOutputTokens) {} 
+	/**
+	 * numInputTokens is only the non-cached portion of a call — with
+	 * prompt caching enabled (see cacheControl below), the bulk of a
+	 * large, mostly-static system prompt is typically served from
+	 * cache after the first call, and Anthropic's own Usage object
+	 * reports that separately from plain input tokens. Reporting only
+	 * numInputTokens understated real cost substantially in practice
+	 * (observed: per-cycle counts near 1, while the Claude console's
+	 * own dashboard showed ~103k real input tokens across an 11-cycle
+	 * run) — cacheCreationInputTokens and cacheReadInputTokens are
+	 * included for a complete, honest total.
+	 */
+	public static record LlmCallResult(String output, long numInputTokens, long numOutputTokens,
+			long cacheCreationInputTokens, long cacheReadInputTokens) {
+		public long totalInputTokens() {
+			return numInputTokens + cacheCreationInputTokens + cacheReadInputTokens;
+		}
+	}
 	
 	LlmCallResult plan(String systemPrompt, String context) throws IOException, InterruptedException;
 
@@ -57,7 +74,9 @@ public interface LlmClient {
                 if (block.text().isPresent()) {
                 	var text = block.text().get().text();
                     // System.out.println("--------------------- OUTPUT FROM THE MODEL: \n" + text + "\n---------------------\n");
-                	return new LlmCallResult(text, u.inputTokens(), u.outputTokens()); 
+                	long cacheCreation = u.cacheCreationInputTokens().orElse(0L);
+                	long cacheRead = u.cacheReadInputTokens().orElse(0L);
+                	return new LlmCallResult(text, u.inputTokens(), u.outputTokens(), cacheCreation, cacheRead); 
                 }
             }
             throw new IOException("Unexpected response shape");

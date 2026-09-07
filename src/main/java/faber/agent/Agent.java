@@ -77,11 +77,14 @@ public class Agent {
     }
 	
 	public void doYourJobAndSelfEvaluate(int cyclesBudget) throws Exception {
+		long totalInputTokens = 0, totalOutputTokens = 0;
 		for (int i = 0; i < cyclesBudget; i++) {
          	if (logCycle) {
          		System.out.println("=== cycle " + agentArch.getNextCycleToRun() + " ===");            
          	}
-            var cycleResult = agentArch.runOneCycle();            
+            var cycleResult = agentArch.runOneCycle();
+            totalInputTokens += cycleResult.llmCallResult().totalInputTokens();
+            totalOutputTokens += cycleResult.llmCallResult().numOutputTokens();
          	if (logCycle) {
 	            System.out.print("*** ENVIRONMENT   ***\n" + agentArch.dumpLightContext());
 	            System.out.print("*** STATE OF MIND ***\n" + cycleResult.stateOfMind());    		//
@@ -89,13 +92,18 @@ public class Agent {
 	            System.out.println("*** GOALS IN PLAN RESULT ***");
 	            System.out.print(agentArch.dumpLastCyclePlanResultGoals());
 	            System.out.println("*** LLM CALL ***");
-	            System.out.println("- input tokens: " + cycleResult.llmCallResult().numInputTokens());
+	            System.out.println("- input tokens (non-cached): " + cycleResult.llmCallResult().numInputTokens());
+	            System.out.println("- input tokens (cache creation): " + cycleResult.llmCallResult().cacheCreationInputTokens());
+	            System.out.println("- input tokens (cache read): " + cycleResult.llmCallResult().cacheReadInputTokens());
+	            System.out.println("- input tokens (total): " + cycleResult.llmCallResult().totalInputTokens());
 	            System.out.println("- output tokens: " + cycleResult.llmCallResult().numOutputTokens());
+	            System.out.println("- Total tokens across " + i + " cycles — input: " + totalInputTokens
+	                    + ", output: " + totalOutputTokens
+	                    + " (input total includes cache creation + cache read, comparable to the Claude console's own reporting)");
 	            System.out.println("*** VALIDATION ***");
 	            System.out.println("[tuple] " + cycleResult.coreTuple());
 	            System.out.println("[WF] pass=" + cycleResult.wf().pass + " " + cycleResult.wf().violations);
 	            System.out.println("[Coherence] pass=" + cycleResult.coherence().pass + " " + cycleResult.coherence().notes);
-	            System.out.println();
          	}
 		}
 		
@@ -103,6 +111,9 @@ public class Agent {
                 agentArch.trace(), Agent::trivialPredictor);
         System.out.println("Predictive sufficiency: " + score.correct + "/" + score.total
                 + " = " + score.accuracy());
+        System.out.println("Total tokens across " + cyclesBudget + " cycles — input: " + totalInputTokens
+                + ", output: " + totalOutputTokens
+                + " (input total includes cache creation + cache read, comparable to the Claude console's own reporting)");
 	}
 	
     private static PlanResult.ActionKind trivialPredictor(
