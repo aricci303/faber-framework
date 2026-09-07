@@ -366,15 +366,50 @@ it. "goal" is optional on any shape that allows it, per the rules above;
 omit it entirely rather than including it as null when this action
 serves no active or new goal.
 
-"goal" may optionally carry a "pending_trigger" — {"condition": "...",
-"planned_action": "..."} — when this goal involves committing now to a
-specific response for later, once some future condition is met (e.g.
-"when email_received arrives from Greg, forward it to John"). Write
-both fields in your own words, as freely as you write "content" — the
-harness's only job is to echo them back to you in full, every turn,
-under PENDING INTENTIONS, regardless of how many turns pass before the
-condition is met. Only include pending_trigger the turn you first
-commit to it; it persists on its own after that.
+"goal" may optionally carry a "pending_trigger" when this goal involves
+committing now to a specific response for later, once some future
+condition is met (e.g. "when Greg emails you, forward it to John"):
+
+  "pending_trigger": {
+    "condition": "<free text, for your own understanding>",
+    "signal_artifact_id": "<id of the artifact whose signal or property update satisfies this>",
+    "signal_name": "<the specific signal name or observable property name to watch for>",
+    "signal_value_contains": "<optional: a specific value to require, e.g. a sender's name>",
+    "recurring": <optional, true or false, default false>,
+    "planned_action": "<free text, for your own understanding>"
+  }
+
+"condition" and "planned_action" stay free text, written in your own
+words exactly like "content" — for your own understanding, echoed back
+to you in full every turn under PENDING INTENTIONS regardless of how
+many turns pass before the condition is met.
+
+"signal_artifact_id" and "signal_name" are what the harness actually
+checks against every turn's real percepts — not a heuristic guess at
+your condition's wording, an exact structural match against a real
+signal or property update. Always provide both: a trigger with neither
+can never be mechanically confirmed as satisfied, and will simply never
+fire no matter how clearly "condition" describes it in prose.
+
+"signal_value_contains" is for the narrower case where the signal alone
+isn't specific enough — not just "any message arrived" but "a message
+arrived from a particular sender." Name only the specific value that
+actually discriminates (e.g. a sender's name), not a restatement of the
+whole condition sentence.
+
+"recurring" matters for standing, ongoing commitments rather than
+one-time ones — e.g. "whenever a message from Marco arrives, flag it,"
+which describes a rule to keep applying, not a single event to wait
+for once. Without "recurring": true, a trigger you successfully act on
+is retired after that one firing, the same as an ordinary achieved
+goal. With it, firing the trigger once does not disarm it — it stays
+live, ready for its condition to be satisfied again. Set it deliberately
+when the request itself is durative ("whenever", "every time", "if you
+ever") rather than a single deferred step ("once X happens, do Y this
+one time").
+
+Only include pending_trigger the turn you first commit to it; it
+persists on its own after that.
 
 "goal" may also carry "status": "achieved" or "status": "dropped", the
 turn you consider it genuinely done or no longer worth pursuing. This
@@ -405,10 +440,13 @@ still be true by the time you'd act on it.
    "goal": {"id": "<goal id>", "content": "<only if newly introducing it>",
     "status": "<only if this action achieves or drops the goal>",
     "pending_trigger": {"condition": "<only if newly introducing it>",
+                         "signal_artifact_id": "<...>", "signal_name": "<...>",
+                         "signal_value_contains": "<optional>", "recurring": false,
                          "planned_action": "<only if newly introducing it>"}},
    "additional_goals": [{"id": "<other goal id>", "content": "<only if newly introducing it>",
     "status": "<only if resolving it right now>",
-    "pending_trigger": {"condition": "<...>", "planned_action": "<...>"}}]}
+    "pending_trigger": {"condition": "<...>", "signal_artifact_id": "<...>", "signal_name": "<...>",
+                         "planned_action": "<...>"}}]}
 
   {"kind": "WAIT"}
 
@@ -423,6 +461,8 @@ commitment you make before waiting on it.
    "goal": {"id": "<goal id>", "content": "<only if newly introducing it>",
     "status": "<only if this action achieves or drops the goal>",
     "pending_trigger": {"condition": "<only if newly introducing it>",
+                         "signal_artifact_id": "<...>", "signal_name": "<...>",
+                         "signal_value_contains": "<optional>", "recurring": false,
                          "planned_action": "<only if newly introducing it>"}}}
 
   {"kind": "STOP_OBSERVING", "artifact_id": "<id>"}

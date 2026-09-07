@@ -10,22 +10,23 @@ import java.util.Map;
  * echoed back in full every cycle by the harness itself, exempt from
  * the delta-only compression applied to STATE OF MIND.
  *
- * Extended to track resolution explicitly. The gap this closes: a goal
- * registered without an attached trigger — the ordinary case for a
- * straightforward sequential plan, not one waiting on a future event —
- * previously had no persistent home anywhere. toContextBlock() only
- * ever rendered the triggers map, never the goals themselves, so a
- * committed goal with no trigger was invisible from the cycle after it
- * was introduced onward — visible only if the model's own narrative
- * happened to still be carrying it, the exact erosion risk this class
- * already exists to prevent for triggered goals. In BDI terms: an
- * intention is meant to remain a standing, aware commitment from the
- * moment it's adopted until it is achieved or dropped — not only while
- * it happens to also carry a future-conditional trigger. resolveGoal
- * gives the agent an explicit, agent-initiated way to close a goal out,
- * the same discipline as NotebookArtifact.retract_note — nothing here
- * infers resolution automatically, since that would be guessing at
- * something only the agent can actually know.
+ * Extended twice since the version that first fixed the flat-goal
+ * visibility gap:
+ *
+ *   - PendingTrigger now carries structural matching fields
+ *     (signalArtifactId, signalName, an optional signalValueContains,
+ *     and a recurring flag) alongside the free-text condition/planned
+ *     action — see AgentArchitecture.conditionSatisfied for why free-
+ *     text heuristic matching alone proved unreliable twice over in
+ *     real runs.
+ *
+ *   - resolveGoal now also resolves any trigger registered for that
+ *     goal id. Without this, a goal marked achieved could still leave
+ *     its trigger lingering in the triggers map — invisible in
+ *     PENDING INTENTIONS (which is gated on the goal being active) but
+ *     still live in checkTriggerFidelity's own iteration, which walks
+ *     the triggers map directly, producing confusing warnings for a
+ *     commitment the agent had already, correctly, closed out.
  */
 public final class GoalLedger {
 
@@ -33,11 +34,21 @@ public final class GoalLedger {
         public final String goalId;
         public final String condition;
         public final String plannedAction;
+        public final String signalArtifactId;
+        public final String signalName;
+        public final String signalValueContains;
+        public final boolean recurring;
 
-        PendingTrigger(String goalId, String condition, String plannedAction) {
+        PendingTrigger(String goalId, String condition, String plannedAction,
+                       String signalArtifactId, String signalName, String signalValueContains,
+                       boolean recurring) {
             this.goalId = goalId;
             this.condition = condition;
             this.plannedAction = plannedAction;
+            this.signalArtifactId = signalArtifactId;
+            this.signalName = signalName;
+            this.signalValueContains = signalValueContains;
+            this.recurring = recurring;
         }
     }
 
@@ -53,15 +64,24 @@ public final class GoalLedger {
     public String contentOf(String id) { return goals.get(id); }
 
     /** Registers a pending trigger for a goal, if one doesn't already exist for it. */
-    public void registerTrigger(String goalId, String condition, String plannedAction) {
-        if (goalId != null && condition != null && plannedAction != null) {
-            triggers.putIfAbsent(goalId, new PendingTrigger(goalId, condition, plannedAction));
-        }
+    public void registerTrigger(String goalId, PlanResult.TriggerSpec spec) {
+        if (goalId == null || spec == null || spec.condition == null || spec.plannedAction == null) return;
+        triggers.putIfAbsent(goalId, new PendingTrigger(goalId, spec.condition, spec.plannedAction,
+                spec.signalArtifactId, spec.signalName, spec.signalValueContains, spec.recurring));
     }
 
-    /** Called once an action addresses a fired trigger — it graduates to an ordinary in-flight operation. */
+    /**
+     * Called once an action addresses a fired trigger. A recurring
+     * trigger stays registered — it graduates back to standing watch,
+     * ready to fire again on its next real occurrence, rather than
+     * being removed after the first. A one-shot trigger (the default)
+     * is removed, the same as before.
+     */
     public void resolveTrigger(String goalId) {
-        triggers.remove(goalId);
+        PendingTrigger t = triggers.get(goalId);
+        if (t != null && !t.recurring) {
+            triggers.remove(goalId);
+        }
     }
 
     /**
@@ -69,11 +89,15 @@ public final class GoalLedger {
      * "dropped", per the action's own declared status. Never inferred:
      * a goal may take several actions and cycles to complete, so no
      * automatic rule (e.g. "a reply happened") can safely stand in for
-     * the agent's own judgment that it's actually done.
+     * the agent's own judgment that it's actually done. Also removes
+     * any trigger still registered for this goal, regardless of its
+     * recurring flag — once the goal itself is closed out, nothing
+     * should keep watching on its behalf.
      */
     public void resolveGoal(String goalId, String status) {
         if (goalId != null && status != null) {
             resolutions.put(goalId, status);
+            triggers.remove(goalId);
         }
     }
 
@@ -89,8 +113,10 @@ public final class GoalLedger {
      * Renders every currently active goal — not only ones with an
      * attached trigger — harness-authored context, never compressed.
      * A goal's own content is shown unconditionally; its trigger, if
-     * one exists, is shown alongside it rather than being the
-     * criterion for whether the goal appears at all.
+     * one exists, is shown alongside it via its free-text condition
+     * and planned action — the structural matching fields are for the
+     * harness's own mechanical check, not something the agent needs
+     * read back to it.
      */
     public String toContextBlock() {
         StringBuilder sb = new StringBuilder();
@@ -105,6 +131,9 @@ public final class GoalLedger {
             if (t != null) {
                 sb.append(", condition: ").append(t.condition)
                   .append(", planned_action: ").append(t.plannedAction);
+                if (t.recurring) {
+                    sb.append(" (recurring — stays active after firing)");
+                }
             }
             sb.append('\n');
         }

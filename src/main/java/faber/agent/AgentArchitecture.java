@@ -199,9 +199,22 @@ public class AgentArchitecture {
 		StringBuilder sb = new StringBuilder();
 		var planRes = lastCycleResult.planResult(); 
 		sb.append("goal: " + planRes.goalId + "\ncontent: " + planRes.goalContent + "\nstatus: " + planRes.goalStatus);
+		if (planRes.trigger != null) {
+			sb.append("\ntrigger: condition=" + planRes.trigger.condition
+					+ ", signal=" + planRes.trigger.signalArtifactId + "/" + planRes.trigger.signalName
+					+ ", value_contains=" + planRes.trigger.signalValueContains
+					+ ", recurring=" + planRes.trigger.recurring);
+		}
 		sb.append("\nadditional goals:\n");
 		for (var g: planRes.additionalGoals) {
-			sb.append("- " + g.id + " - trigger: " + g.pendingTriggerCondition + " - action: " + g.pendingTriggerPlannedAction + "\n");			
+			sb.append("- " + g.id + " - status: " + g.status);
+			if (g.trigger != null) {
+				sb.append(" - trigger: condition=" + g.trigger.condition
+						+ ", signal=" + g.trigger.signalArtifactId + "/" + g.trigger.signalName
+						+ ", value_contains=" + g.trigger.signalValueContains
+						+ ", recurring=" + g.trigger.recurring);
+			}
+			sb.append("\n");
 		}
 		return sb.toString();
 	}
@@ -284,14 +297,15 @@ public class AgentArchitecture {
 	 */
 	private void checkTriggerFidelity(List<Percept> percepts, PlanResult result) {
 		for (GoalLedger.PendingTrigger trigger : List.copyOf(goalLedger.pendingTriggers().values())) {
-			boolean satisfied = conditionSatisfied(trigger.condition, percepts);
+			boolean satisfied = conditionSatisfied(trigger, percepts);
 			if (!satisfied)
 				continue;
 
 			boolean addressed = trigger.goalId.equals(result.goalId);
 			if (addressed) {
 				goalLedger.resolveTrigger(trigger.goalId);
-				System.out.println("[TriggerFidelity] resolved: " + trigger.goalId);
+				System.out.println("[TriggerFidelity] resolved: " + trigger.goalId
+						+ (trigger.recurring ? " (recurring — stays active)" : ""));
 			} else {
 				System.out.println("[TriggerFidelity][WARNING] condition satisfied for goal '" + trigger.goalId
 						+ "' this cycle, but action does not address it (planned: " + trigger.plannedAction + ")");
@@ -300,22 +314,34 @@ public class AgentArchitecture {
 	}
 
 	/**
-	 * Requires the condition's primary term — its first word, by convention the
-	 * signal/event name the condition names first, e.g. "email_received" in
-	 * "email_received on email-01 with sender containing greg" — to appear verbatim
-	 * in a percept line. An earlier version counted any two keyword hits, which
-	 * produced false positives on operation_started/operation_failed lines that
-	 * incidentally mentioned the same artifact id and a substring of the sender's
-	 * address without being the signal at all. This is still an approximate
-	 * heuristic — it cannot distinguish two different signals sharing a primary
-	 * term but different senders — flagged here rather than left silent, in the
-	 * same spirit as C1.
+	 * Structural matching against the real Percept fields — no text
+	 * heuristics at all. Replaces an earlier version that tried to
+	 * infer what to check for by parsing the condition sentence itself
+	 * (its first word, as a stand-in for the signal name), which broke
+	 * twice in real runs: first when two unrelated percepts happened to
+	 * share two incidental keywords, then again when a condition's own
+	 * first word happened to be an ordinary word ("the") that matches
+	 * almost any percept carrying natural-language content at all.
+	 * signalValueContains stays as an explicit, scoped, optional text
+	 * check — for the genuinely value-conditional cases (e.g. "sender
+	 * is Marco specifically") — rather than being derived from the
+	 * whole condition sentence the way the retired heuristic was.
 	 */
-	private static boolean conditionSatisfied(String condition, List<Percept> percepts) {
-		String primaryTerm = condition.trim().split("\\s+", 2)[0].toLowerCase();
+	private static boolean conditionSatisfied(GoalLedger.PendingTrigger trigger, List<Percept> percepts) {
+		if (trigger.signalArtifactId == null || trigger.signalName == null) {
+			return false; // no structural spec given — cannot be mechanically checked; never silently guess
+		}
 		for (Percept p : percepts) {
-			if (p.toContextLine().toLowerCase().contains(primaryTerm))
-				return true;
+			if (!trigger.signalArtifactId.equals(p.artifactId)) continue;
+
+			boolean nameMatches = trigger.signalName.equals(p.signalName) || trigger.signalName.equals(p.propName);
+			if (!nameMatches) continue;
+
+			if (trigger.signalValueContains != null) {
+				String line = p.toContextLine().toLowerCase();
+				if (!line.contains(trigger.signalValueContains.toLowerCase())) continue;
+			}
+			return true;
 		}
 		return false;
 	}

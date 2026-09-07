@@ -38,7 +38,7 @@ public interface TupleExtractor {
                 ledger.registerOrGet(action.goalId, action.goalContent);
             }
             if (action.goalId != null) {
-                ledger.registerTrigger(action.goalId, action.pendingTriggerCondition, action.pendingTriggerPlannedAction);
+                ledger.registerTrigger(action.goalId, action.trigger);
                 ledger.resolveGoal(action.goalId, action.goalStatus);
             }
 
@@ -50,7 +50,7 @@ public interface TupleExtractor {
                 if (!ledger.isRegistered(ag.id)) {
                     ledger.registerOrGet(ag.id, ag.content);
                 }
-                ledger.registerTrigger(ag.id, ag.pendingTriggerCondition, ag.pendingTriggerPlannedAction);
+                ledger.registerTrigger(ag.id, ag.trigger);
                 ledger.resolveGoal(ag.id, ag.status);
             }
 
