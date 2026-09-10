@@ -27,45 +27,46 @@ public interface TupleExtractor {
      */
     final class HeuristicTupleExtractor implements TupleExtractor {
         @Override
-        public CoreTuple extract(List<Percept> perceptsThisCycle, PlanResult action, GoalLedger ledger) {
+        public CoreTuple extract(List<Percept> perceptsThisCycle, PlanResult planResult, GoalLedger ledger) {
             Set<String> W = new LinkedHashSet<>();
             for (Percept p : perceptsThisCycle) {
             	W.add(p.toContextLine());
             }
 
-            String G = action.goalId != null ? action.goalId : CoreTuple.BOTTOM;
-            if (action.goalId != null && !ledger.isRegistered(action.goalId)) {
-                ledger.registerOrGet(action.goalId, action.goalContent);
-            }
-            if (action.goalId != null) {
-                ledger.registerTrigger(action.goalId, action.trigger);
-                ledger.resolveGoal(action.goalId, action.goalStatus);
-            }
-
-            // Goals recognized this cycle but not driving this cycle's action — registered exactly
-            // like the main goal, but deliberately left out of G/Relation below: only the one goal
-            // actually justifying this cycle's action counts as this cycle's means-end relation.
-            for (PlanResult.AdditionalGoal ag : action.additionalGoals) {
-                if (ag.id == null) continue;
-                if (!ledger.isRegistered(ag.id)) {
-                    ledger.registerOrGet(ag.id, ag.content);
+            // Every goal in <goals> is registered/updated identically, whether or not it's the one
+            // driving this cycle's action — first-class, not an attachment to whichever action happens
+            // to be taken this cycle.
+            for (PlanResult.GoalEntry g : planResult.getGoals()) {
+                if (g.id == null) continue;
+                if (!ledger.isRegistered(g.id)) {
+                    ledger.registerOrGet(g.id, g.content);
                 }
-                ledger.registerTrigger(ag.id, ag.trigger);
-                ledger.resolveGoal(ag.id, ag.status);
+                ledger.registerTrigger(g.id, g.trigger);
+                ledger.resolveGoal(g.id, g.status);
             }
 
-            Relation r = action.goalId != null ? Relation.MEANS_END : Relation.REACTIVE;
+            var goalId = planResult.getActInfo().goalId();
+            String G = goalId != null ? goalId : CoreTuple.BOTTOM;
+            Relation r = goalId != null ? Relation.MEANS_END : Relation.REACTIVE;
 
             
-            String targetId = action.getString("artifact_id");
+            var content = planResult.getActInfo().content();
+            
+            String targetId = null;
+            if (content.has("artifact_id")){
+            	targetId = content.getString("artifact_id");
+            }
             Set<String> WPrime = new LinkedHashSet<>();
             for (Percept p : perceptsThisCycle) {
                 boolean relevant = (targetId != null && targetId.equals(p.artifactId)) || (p.correlationId != null);
-                if (relevant) WPrime.add(p.toContextLine());
+                if (relevant) {
+                	WPrime.add(p.toContextLine());
+                }
             }
-            if (WPrime.isEmpty()) WPrime.addAll(W);
-
-            return new CoreTuple(W, G, action.kind, r, WPrime);
+            if (WPrime.isEmpty()) { 
+            	WPrime.addAll(W);
+            }
+            return new CoreTuple(W, G, planResult.getActInfo().kind(), r, WPrime);
         }
     }
 }

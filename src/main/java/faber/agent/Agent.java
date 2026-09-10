@@ -97,7 +97,7 @@ public class Agent {
 	            System.out.println("- input tokens (cache read): " + cycleResult.llmCallResult().cacheReadInputTokens());
 	            System.out.println("- input tokens (total): " + cycleResult.llmCallResult().totalInputTokens());
 	            System.out.println("- output tokens: " + cycleResult.llmCallResult().numOutputTokens());
-	            System.out.println("- Total tokens across " + i + " cycles — input: " + totalInputTokens
+	            System.out.println("- Total tokens across " + (i+1) + " cycles — input: " + totalInputTokens
 	                    + ", output: " + totalOutputTokens
 	                    + " (input total includes cache creation + cache read, comparable to the Claude console's own reporting)");
 	            System.out.println("*** VALIDATION ***");
@@ -121,9 +121,6 @@ public class Agent {
         boolean anyResolved = W.stream().anyMatch(s -> s.startsWith("operation_completed") || s.startsWith("operation_failed"));
         return anyResolved ? PlanResult.ActionKind.INVOKE : PlanResult.ActionKind.WAIT;
     }
-	
-	
-	
 	
 	public void notifyNewPercept(Percept p) {
 		eventQueue.publish(p);

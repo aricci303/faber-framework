@@ -11,20 +11,25 @@ import com.anthropic.models.messages.CacheControlEphemeral;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.Model;
+import com.anthropic.models.messages.TextBlockParam;
 
 public interface LlmClient {
 	
 	/**
-	 * numInputTokens is only the non-cached portion of a call — with
-	 * prompt caching enabled (see cacheControl below), the bulk of a
-	 * large, mostly-static system prompt is typically served from
-	 * cache after the first call, and Anthropic's own Usage object
-	 * reports that separately from plain input tokens. Reporting only
-	 * numInputTokens understated real cost substantially in practice
-	 * (observed: per-cycle counts near 1, while the Claude console's
-	 * own dashboard showed ~103k real input tokens across an 11-cycle
-	 * run) — cacheCreationInputTokens and cacheReadInputTokens are
-	 * included for a complete, honest total.
+	 * numInputTokens is only the non-cached portion of a call. Prompt
+	 * caching (see systemOfTextBlockParams below) is meant to serve the
+	 * bulk of a large, mostly-static system prompt from cache after the
+	 * first call — but an earlier version attached cacheControl to the
+	 * top-level MessageCreateParams.Builder rather than to the system
+	 * prompt's own TextBlockParam, which does not actually mark that
+	 * block as the cached prefix. Real symptom this produced: every
+	 * single cycle showed a fresh cache creation and zero cache reads,
+	 * confirmed across an 11-cycle run — the cache was being rewritten
+	 * every time rather than ever actually being reused. Fixed by
+	 * attaching cache_control precisely to the system prompt's block.
+	 * cacheCreationInputTokens and cacheReadInputTokens are still
+	 * included here regardless, since accurate reporting matters
+	 * independent of whether caching itself is working correctly.
 	 */
 	public static record LlmCallResult(String output, long numInputTokens, long numOutputTokens,
 			long cacheCreationInputTokens, long cacheReadInputTokens) {
@@ -52,9 +57,12 @@ public interface LlmClient {
             
             com.anthropic.models.messages.MessageCreateParams params = MessageCreateParams.builder()
                 .model(model)
-                .cacheControl(CacheControlEphemeral.builder().build())
                 .maxTokens(8192)
-                .system(systemPrompt)
+                .systemOfTextBlockParams(java.util.List.of(
+                        TextBlockParam.builder()
+                                .text(systemPrompt)
+                                .cacheControl(CacheControlEphemeral.builder().build())
+                                .build()))
                 .addUserMessage(context)
                 .build();            
                         

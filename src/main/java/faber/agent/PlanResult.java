@@ -1,15 +1,29 @@
 package faber.agent;
 
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * The parsed result of one Plan (micro-loop) run: the updated narration
- * plus the committed action, parsed from a real structured JSON action
- * format 
+ * The parsed result of one Plan (micro-loop) run, now three top-level
+ * blocks instead of two: <state_of_mind> (free narrative, unchanged),
+ * <goals> (a structured, homogeneous array — every goal registered or
+ * updated this cycle, whether or not it's the one driving this
+ * cycle's action), and <action> (now genuinely minimal — kind,
+ * parameters, and a bare goal_id string referencing one of this
+ * cycle's own goals, or absent for a reactive action with none).
+ *
+ * This replaces the earlier design where a single "goal" object and a
+ * separate, differently-shaped "additional_goals" array both lived
+ * nested inside <action> — two shapes for what was conceptually the
+ * same kind of thing. Goals are first-class here, not an attachment to
+ * whichever action happens to be taken; <goals> is required every
+ * cycle, even as an empty array, the same reasoning as <state_of_mind>
+ * and <action> already being mandatory — a model with nothing new to
+ * register says so explicitly, rather than the harness having to guess
+ * whether omission means "nothing new" or "forgot."
  */
 public final class PlanResult {
 
@@ -17,21 +31,10 @@ public final class PlanResult {
 
     /**
      * A trigger's structural matching fields, parsed alongside its free
-     * text. Replaces an earlier design that tried to infer what to
-     * check for by heuristically parsing the "condition" sentence
-     * itself (its first word, taken as a stand-in for the signal
-     * name) — which broke in two different ways in real runs: once
-     * when two unrelated percepts happened to share two incidental
-     * keywords, and again when a condition's own first word happened
-     * to be an ordinary word ("the") that matches almost any percept
-     * carrying natural-language content at all. Both failures came
-     * from trying to do reliable matching by parsing free text instead
-     * of asking for the structural fact directly. signalArtifactId and
-     * signalName are checked against the real Percept object's own
-     * fields — no text heuristics at all. signalValueContains stays
-     * optional, explicit, and scoped for the genuinely
-     * value-conditional cases (e.g. "sender is Marco specifically"),
-     * rather than being derived from the whole condition sentence.
+     * text. signalArtifactId and signalName are checked against the
+     * real Percept object's own fields — no text heuristics. See
+     * GoalLedger's own doc for the history of why this replaced an
+     * earlier, less reliable approach.
      */
     public static final class TriggerSpec {
         public final String condition;
@@ -64,133 +67,117 @@ public final class PlanResult {
     }
 
     /**
-     * One entry of "additional_goals" — a commitment recognized this
-     * cycle but not the one driving this cycle's action. Deliberately
-     * the same shape as "goal" itself, just plural: this exists because
-     * a single cycle's perception can imply more than one distinct
-     * goal (two user messages arriving together, each implying its own
-     * commitment) while only one action can be taken this cycle. Left
-     * in prose, the others are silently lost the moment narrative
-     * moves on — the identical failure shape as manuals and origin
-     * tracking eroding across many cycles, just triggered by several
-     * simultaneous implications in one cycle instead.
+     * One entry of the <goals> array — homogeneous, whether or not this
+     * particular goal is the one driving this cycle's action.
      */
-    public static final class AdditionalGoal {
+    public static final class GoalEntry {
         public final String id;
         public final String content;
         public final String status;
         public final TriggerSpec trigger;
 
-        AdditionalGoal(String id, String content, String status, TriggerSpec trigger) {
+        GoalEntry(String id, String content, String status, TriggerSpec trigger) {
             this.id = id;
             this.content = content;
             this.status = status;
             this.trigger = trigger;
         }
+
+        static GoalEntry parse(JSONObject g) {
+            String id = (String) g.get("id");
+            String content = g.has("content") ? (String) g.get("content") : null;
+            String status = g.has("status") ? (String) g.get("status") : null;
+            TriggerSpec trigger = null;
+            if (g.has("pending_trigger")) {
+            	Object obj = g.get("pending_trigger");
+            	if (obj instanceof JSONObject) {
+            		trigger = TriggerSpec.parse(((JSONObject) obj));
+            	} else {
+            		System.err.println("ERROR: pending_trigger is not a JSONObjecy");
+            	}
+            }
+            return new GoalEntry(id, content, status, trigger);
+        }
     }
+    
+    public static final record ActionInfo(ActionKind kind, String goalId, JSONObject content) {}
 
-    public final String stateOfMind;
-    public final ActionKind kind;
-    public final JSONObject action;
-    public final String goalId;
-    public final String goalContent;
-    public final String goalStatus;
-    public final TriggerSpec trigger;
-    public final java.util.List<AdditionalGoal> additionalGoals;
+    private final String stateOfMind;
+    private final java.util.List<GoalEntry> goals;
+    private final ActionInfo actInfo;
+    // public final ActionKind kind;
+    // public final JSONObject action;
+    // public final String actionGoalId;
 
-    private PlanResult(String stateOfMind, ActionKind kind, JSONObject action,
-                        String goalId, String goalContent, String goalStatus,
-                        TriggerSpec trigger, java.util.List<AdditionalGoal> additionalGoals) {
+    private PlanResult(String stateOfMind, java.util.List<GoalEntry> goals, ActionInfo actInfo) {
+                        // ActionKind kind, JSONObject action, String actionGoalId) {
         this.stateOfMind = stateOfMind;
-        this.kind = kind;
-        this.action = action;
-        this.goalId = goalId;
-        this.goalContent = goalContent;
-        this.goalStatus = goalStatus;
-        this.trigger = trigger;
-        this.additionalGoals = additionalGoals;
+        this.goals = goals;
+        this.actInfo = actInfo;
+        // this.kind = kind;
+        // this.action = action;
+        // this.actionGoalId = actionGoalId;
     }
 
     private static final Pattern SOM = Pattern.compile("<state_of_mind>(.*?)</state_of_mind>", Pattern.DOTALL);
+    private static final Pattern GOALS = Pattern.compile("<goals>(.*?)</goals>", Pattern.DOTALL);
     private static final Pattern ACT = Pattern.compile("<action>(.*?)</action>", Pattern.DOTALL);
 
-    @SuppressWarnings("unchecked")
     public static PlanResult parse(String rawModelOutput) {
         Matcher somMatcher = SOM.matcher(rawModelOutput);
+        Matcher goalsMatcher = GOALS.matcher(rawModelOutput);
         Matcher actMatcher = ACT.matcher(rawModelOutput);
         if (!somMatcher.find()) {
             throw new IllegalStateException("Model output missing <state_of_mind> — refusing to act without it.");
+        }
+        if (!goalsMatcher.find()) {
+            throw new IllegalStateException("Model output missing <goals> — required every cycle, even as [].");
         }
         if (!actMatcher.find()) {
             throw new IllegalStateException("Model output missing <action>.");
         }
         String som = somMatcher.group(1).trim();
 
-        JSONObject parsed = null;
-        String act = actMatcher.group(1).trim();
-        
+        java.util.List<GoalEntry> goals = new java.util.ArrayList<>();
+        String goalsText = goalsMatcher.group(1).trim();
+        JSONArray goalsArr;
         try {
-        	parsed = new JSONObject(act);
+            goalsArr = new JSONArray(goalsText);
         } catch (Exception ex) {
-            throw new IllegalStateException("Model output malformed <act> (not a valid JSON object)");
+            throw new IllegalStateException("Model output malformed <goals> (not a valid JSON array): " + goalsText);
         }
-        
+        for (int i = 0; i < goalsArr.length(); i++) {
+            goals.add(GoalEntry.parse(goalsArr.getJSONObject(i)));
+        }
+
+        JSONObject parsed;
+        String act = actMatcher.group(1).trim();
+        try {
+            parsed = new JSONObject(act);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Model output malformed <action> (not a valid JSON object)");
+        }
+
         Object kindRaw = parsed.get("kind");
         if (kindRaw == null) {
             throw new IllegalStateException("Action JSON missing required \"kind\" field: " + parsed);
         }
         ActionKind kind = ActionKind.valueOf(kindRaw.toString());
-
-        String goalId = null, goalContent = null, goalStatus = null;
-        TriggerSpec trigger = null;
-        if (parsed.has("goal")) {
-	        JSONObject w = parsed.getJSONObject("goal"); 
-	        goalId = (String) w.get("id");
-	        if (w.has("content")) {
-	        	goalContent = (String) w.get("content");
-		    }
-		    if (w.has("status")) {
-		    	goalStatus = (String) w.get("status");
-		    }
-	        if (w.has("pending_trigger")) {
-	        	trigger = TriggerSpec.parse(w.getJSONObject("pending_trigger"));
-	        }
-        }
-
-        java.util.List<AdditionalGoal> additionalGoals = new java.util.ArrayList<>();
-        if (parsed.has("additional_goals")) {
-            org.json.JSONArray arr = parsed.getJSONArray("additional_goals");
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject g = arr.getJSONObject(i);
-                String id = (String) g.get("id");
-                String content = g.has("content") ? (String) g.get("content") : null;
-                String status = g.has("status") ? (String) g.get("status") : null;
-                TriggerSpec t = g.has("pending_trigger") ? TriggerSpec.parse(g.getJSONObject("pending_trigger")) : null;
-                additionalGoals.add(new AdditionalGoal(id, content, status, t));
-            }
-        }
-
-        return new PlanResult(som, kind, parsed, goalId, goalContent, goalStatus, trigger, additionalGoals);
+        String actionGoalId = parsed.has("goal_id") ? parsed.getString("goal_id") : null;
+        var actInfo = new ActionInfo(kind, actionGoalId, parsed);
+        return new PlanResult(som, goals, actInfo);
     }
 
-    public String getString(String key) { 
-    	if (action.has(key)) {
-    		return action.getString(key); 
-    	} else {
-    		return null;
-    	}
+    public String getStateOfMind() {
+    	return stateOfMind;
     }
 
-    public JSONObject getJSONObject(String key) {
-    	if (action.has(key)) {
-    		return action.getJSONObject(key);
-    	} else {
-    		return new JSONObject();
-    	}
+    public java.util.List<GoalEntry> getGoals(){
+    	return goals;
     }
-
-    public long getLong(String key, long defaultValue) {
-        Object v = action.get(key);
-        return v == null ? defaultValue : ((Number) v).longValue();
+    
+    public ActionInfo getActInfo() {
+    	return this.actInfo;
     }
+    
 }

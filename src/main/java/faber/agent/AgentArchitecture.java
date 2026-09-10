@@ -12,6 +12,7 @@ import org.json.JSONObject;
 import com.anthropic.models.messages.Model;
 
 import faber.agent.LlmClient.LlmCallResult;
+import faber.agent.PlanResult.ActionInfo;
 import faber.agent.formal.Coherence;
 import faber.agent.formal.CoreTuple;
 import faber.agent.formal.TupleExtractor;
@@ -101,9 +102,9 @@ public class AgentArchitecture {
 
 		var llmCallResult = llm.plan(SystemPrompt.systemPrompt, context);
 		var planResult = PlanResult.parse(llmCallResult.output());
-		stateOfMind.update(planResult.stateOfMind);
+		stateOfMind.update(planResult.getStateOfMind());
 
-		var actResult = act(planResult);
+		var actResult = act(planResult.getActInfo());
 		checkTriggerFidelity(percepts, planResult);
 
 		CoreTuple tuple = extractor.extract(percepts, planResult, goalLedger);
@@ -178,8 +179,6 @@ public class AgentArchitecture {
 		StringBuilder sb = new StringBuilder();
 		sb.append("[MECHANICAL LOG]\n").append(mechanicalLog.toContextBlock()).append("\n");
 		sb.append("[WORKSPACE]\n").append(this.dumpLightWorkspaceContextBlock());
-		// sb.append("[PENDING INTENTIONS]\n").append(goalLedger.toContextBlock()).append("\n\n");
-		// sb.append("[STATE OF MIND]\n").append(stateOfMind.current()).append("\n\n");
 		sb.append("[NEW PERCEPTS]\n");
 		var percepts = lastCycleResult.senseResult();
 		if (percepts.isEmpty()) {
@@ -197,17 +196,15 @@ public class AgentArchitecture {
 	
 	public String dumpLastCyclePlanResultGoals() {
 		StringBuilder sb = new StringBuilder();
-		var planRes = lastCycleResult.planResult(); 
-		sb.append("goal: " + planRes.goalId + "\ncontent: " + planRes.goalContent + "\nstatus: " + planRes.goalStatus);
-		if (planRes.trigger != null) {
-			sb.append("\ntrigger: condition=" + planRes.trigger.condition
-					+ ", signal=" + planRes.trigger.signalArtifactId + "/" + planRes.trigger.signalName
-					+ ", value_contains=" + planRes.trigger.signalValueContains
-					+ ", recurring=" + planRes.trigger.recurring);
-		}
-		sb.append("\nadditional goals:\n");
-		for (var g: planRes.additionalGoals) {
-			sb.append("- " + g.id + " - status: " + g.status);
+		var planRes = lastCycleResult.planResult();
+		// var actInfo = lastCycleResult.actResult();		
+		// sb.append("action's goal_id: " + planRes.actionGoalId);
+		sb.append("\nGoals identified in this cycle:\n");
+		for (var g: planRes.getGoals()) {
+			sb.append("- " + g.id);			
+			if (g.content != null) {
+				sb.append(" - content: " + g.content);
+			}
 			if (g.trigger != null) {
 				sb.append(" - trigger: condition=" + g.trigger.condition
 						+ ", signal=" + g.trigger.signalArtifactId + "/" + g.trigger.signalName
@@ -219,11 +216,12 @@ public class AgentArchitecture {
 		return sb.toString();
 	}
 	
-	private ActResult act(PlanResult result) {
+	private ActResult act(ActionInfo actTodo) {
 		boolean committedToWait = false;
 		String act = ""; 
+		JSONObject content = actTodo.content();
 		
-		switch (result.kind) {
+		switch (actTodo.kind()) {
 		case WAIT:
 			committedToWait = true;
 			act = "wait";
@@ -231,9 +229,9 @@ public class AgentArchitecture {
 
 		case INVOKE: {
 			committedToWait = false;
-			String artifactId = result.getString("artifact_id");
-			String operation = result.getString("operation_name");
-			JSONObject args = result.getJSONObject("parameters");
+			String artifactId = content.getString("artifact_id");
+			String operation = content.getString("operation_name");
+			JSONObject args = content.getJSONObject("parameters");
 			Artifact target = workspace.instanceOf(artifactId);
 			if (target == null) {
 				// Refused outright — no operation_started, per the system prompt's rule that a
@@ -250,7 +248,7 @@ public class AgentArchitecture {
 
 		case FOCUS: {
 			committedToWait = false;
-			String artifactId = result.getString("artifact_id");
+			String artifactId = content.getString("artifact_id");
 			try {
 				workspace.startObserving(agent, artifactId);
 				act = "focus " + artifactId;
@@ -267,7 +265,7 @@ public class AgentArchitecture {
 
 		case STOP_OBSERVING: {
 			committedToWait = false;
-			String artifactId = result.getString("artifact_id");
+			String artifactId = content.getString("artifact_id");
 			try {
 				workspace.stopObserving(agent, artifactId);
 				act = "stop_observing " + artifactId;
@@ -301,7 +299,7 @@ public class AgentArchitecture {
 			if (!satisfied)
 				continue;
 
-			boolean addressed = trigger.goalId.equals(result.goalId);
+			boolean addressed = trigger.goalId.equals(result.getActInfo().goalId());
 			if (addressed) {
 				goalLedger.resolveTrigger(trigger.goalId);
 				System.out.println("[TriggerFidelity] resolved: " + trigger.goalId

@@ -167,15 +167,14 @@ Each time you are invoked, your context will contain, in this order:
 4. PENDING INTENTIONS — every goal you currently consider yourself
    committed to, listed in full every turn, always — this block is
    never subject to the delta-only rule that governs STATE OF MIND.
-   Every goal you register appears here from the turn after you
-   introduce it until you explicitly close it out (see "status"
-   below) — not only the ones that also carry a conditional trigger,
-   and not only the one you're directly acting on in a given turn (see
-   "additional_goals" below, for registering more than one commitment
-   recognized in the same turn). An ordinary goal you are actively working through, with nothing in
-   particular to wait for, still belongs here for exactly the same
-   reason a conditional one does: STATE OF MIND's own economy (say
-   only what changed) will otherwise, quite reasonably, treat
+   Every goal you register in <goals> (see below) appears here from the
+   turn after you introduce it until you explicitly close it out (see
+   "status" below) — not only the ones that also carry a conditional
+   trigger, and not only the one you cite as driving a given turn's
+   action. An ordinary goal you are actively working through, with
+   nothing in particular to wait for, still belongs here for exactly
+   the same reason a conditional one does: STATE OF MIND's own economy
+   (say only what changed) will otherwise, quite reasonably, treat
    repeating what you're pursuing as padding — which is exactly how it
    gets silently lost, whether or not a trigger happens to be attached.
    Do not treat a listing here as something to also restate in STATE
@@ -183,12 +182,11 @@ Each time you are invoked, your context will contain, in this order:
    turn regardless of what you write.
 
    A goal only stops appearing once you explicitly say so — set
-   "status": "achieved" or "status": "dropped" in a later action
-   referencing the same goal id (see the action shapes below). Nothing
-   infers this for you: a goal may take many actions and turns to
-   complete, so only you actually know when it's genuinely done or no
-   longer worth pursuing. Until you say so, it stays listed, exactly
-   as a real commitment should.
+   "status": "achieved" or "status": "dropped" in a later <goals> entry
+   for the same id (see below). Nothing infers this for you: a goal may
+   take many actions and turns to complete, so only you actually know
+   when it's genuinely done or no longer worth pursuing. Until you say
+   so, it stays listed, exactly as a real commitment should.
 
    For a goal that also carries a conditional trigger: when the listed
    condition is met by this turn's percepts, that pending intention is
@@ -360,24 +358,27 @@ Your action, each turn, is exactly one of:
 - WAIT — take no external action this turn, having explicitly decided to
   wait for a specific pending operation or event before proceeding.
 
-The content of <action> must be exactly one JSON object, one of the
-following shapes depending on kind — no other fields, no prose alongside
-it. "goal" is optional on any shape that allows it, per the rules above;
-omit it entirely rather than including it as null when this action
-serves no active or new goal.
+Every goal you currently consider active or newly introduced this turn
+belongs in <goals> — a required block, every turn, even as an empty
+array []. Never nested inside <action>: a goal is not an attachment to
+whichever action happens to be taken this cycle, it is a first-class
+commitment in its own right, and homogeneous — the same shape whether
+or not it happens to be the one an action cites this turn.
 
-"goal" may optionally carry a "pending_trigger" when this goal involves
-committing now to a specific response for later, once some future
-condition is met (e.g. "when Greg emails you, forward it to John"):
+<goals>
+[
+  {"id": "<goal id>", "content": "<only if newly introducing it>",
+   "status": "<only if this entry achieves or drops the goal>",
+   "pending_trigger": {"condition": "<only if newly introducing it>",
+                        "signal_artifact_id": "<...>", "signal_name": "<...>",
+                        "signal_value_contains": "<optional>", "recurring": false,
+                        "planned_action": "<only if newly introducing it>"}}
+]
+</goals>
 
-  "pending_trigger": {
-    "condition": "<free text, for your own understanding>",
-    "signal_artifact_id": "<id of the artifact whose signal or property update satisfies this>",
-    "signal_name": "<the specific signal name or observable property name to watch for>",
-    "signal_value_contains": "<optional: a specific value to require, e.g. a sender's name>",
-    "recurring": <optional, true or false, default false>,
-    "planned_action": "<free text, for your own understanding>"
-  }
+An entry's "pending_trigger" is for committing now to a specific
+response for later, once some future condition is met (e.g. "when Greg
+emails you, forward it to John"):
 
 "condition" and "planned_action" stay free text, written in your own
 words exactly like "content" — for your own understanding, echoed back
@@ -411,42 +412,37 @@ one time").
 Only include pending_trigger the turn you first commit to it; it
 persists on its own after that.
 
-"goal" may also carry "status": "achieved" or "status": "dropped", the
-turn you consider it genuinely done or no longer worth pursuing. This
-is the only way a goal stops being listed under PENDING INTENTIONS —
-omitting it, or simply not mentioning that goal for a while, does
-nothing; the goal stays listed regardless, exactly as a real
-commitment should. Set status only when you mean it: not the moment
-you take one step toward a multi-step goal, but the moment the whole
-thing is actually resolved, one way or the other.
+An entry's "status": "achieved" or "status": "dropped" is the only way
+a goal stops being listed under PENDING INTENTIONS — omitting it, or
+simply not mentioning that goal for a while, does nothing; the goal
+stays listed regardless, exactly as a real commitment should. Set
+status only when you mean it: not the moment you take one step toward
+a multi-step goal, but the moment the whole thing is actually resolved,
+one way or the other.
 
-"goal" is one goal — the one actually driving this cycle's action. If
-what you perceive this cycle implies more than one distinct commitment
-— most commonly, more than one incoming communication arriving
-together, each carrying its own implication — you can still only act
-on one of them this cycle, but you are not limited to registering only
-one. "additional_goals" is an array of the same shape as "goal"
-("id", "content", "status", "pending_trigger", all following the same
-rules) for every other commitment this cycle's perception implies,
-beyond the one you're acting on right now. Register them the same
-cycle you recognize them, not "next turn" — a commitment only stated
-in your own narration as something to handle later has no guarantee of
-surviving to actually be handled; registering it here is what makes it
-a real, tracked commitment rather than a sentence that may or may not
-still be true by the time you'd act on it.
+If what you perceive this turn implies more than one distinct
+commitment — most commonly, more than one incoming communication
+arriving together, each carrying its own implication — you can still
+only act on one of them this turn, but <goals> is not limited to one
+entry: list every commitment you recognize, whether or not it's the
+one <action> cites. Register them the same turn you recognize them,
+not "next turn" — a commitment only stated in your own narration as
+something to handle later has no guarantee of surviving to actually be
+handled; registering it here is what makes it a real, tracked
+commitment rather than a sentence that may or may not still be true by
+the time you'd act on it.
+
+The content of <action> must be exactly one JSON object, one of the
+following shapes depending on kind — no other fields, no prose alongside
+it. "goal_id" is a bare string, present on any shape that allows it,
+naming which entry in this same turn's <goals> is the one actually
+driving this action — omit it entirely when this action is a reaction
+with no specific goal behind it, rather than inventing one to fill the
+field.
 
   {"kind": "INVOKE", "artifact_id": "<id>", "operation_name": "<name>",
    "parameters": {<param name>: <value>, ...},
-   "goal": {"id": "<goal id>", "content": "<only if newly introducing it>",
-    "status": "<only if this action achieves or drops the goal>",
-    "pending_trigger": {"condition": "<only if newly introducing it>",
-                         "signal_artifact_id": "<...>", "signal_name": "<...>",
-                         "signal_value_contains": "<optional>", "recurring": false,
-                         "planned_action": "<only if newly introducing it>"}},
-   "additional_goals": [{"id": "<other goal id>", "content": "<only if newly introducing it>",
-    "status": "<only if resolving it right now>",
-    "pending_trigger": {"condition": "<...>", "signal_artifact_id": "<...>", "signal_name": "<...>",
-                         "planned_action": "<...>"}}]}
+   "goal_id": "<id of one of this turn's <goals> entries>"}
 
   {"kind": "WAIT"}
 
@@ -457,13 +453,7 @@ what alarm-01 is for: set_alarm before you WAIT, exactly like any other
 commitment you make before waiting on it.
 
 
-  {"kind": "FOCUS", "artifact_id": "<id>",
-   "goal": {"id": "<goal id>", "content": "<only if newly introducing it>",
-    "status": "<only if this action achieves or drops the goal>",
-    "pending_trigger": {"condition": "<only if newly introducing it>",
-                         "signal_artifact_id": "<...>", "signal_name": "<...>",
-                         "signal_value_contains": "<optional>", "recurring": false,
-                         "planned_action": "<only if newly introducing it>"}}}
+  {"kind": "FOCUS", "artifact_id": "<id>", "goal_id": "<optional>"}
 
   {"kind": "STOP_OBSERVING", "artifact_id": "<id>"}
 
@@ -496,8 +486,13 @@ Structure of your output, every turn:
 [delta-only update, per the rules above]
 </state_of_mind>
 
+<goals>
+[every goal recognized or updated this turn, [] if none — see above]
+</goals>
+
 <action>
-[exactly one JSON object, in one of the shapes above]
+[exactly one JSON object, in one of the shapes above, referencing
+one of this turn's <goals> entries via goal_id if any drives it]
 </action>
 """;
 
