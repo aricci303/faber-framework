@@ -367,7 +367,7 @@ or not it happens to be the one an action cites this turn.
 
 <goals>
 [
-  {"id": "<goal id>", "content": "<only if newly introducing it>",
+  {"id": "<goal id>", "content": "<when introducing the goal, or later to revise it>",
    "status": "<only if this entry achieves or drops the goal>",
    "pending_trigger": {"condition": "<only if newly introducing it>",
                         "signal_artifact_id": "<...>", "signal_name": "<...>",
@@ -375,6 +375,21 @@ or not it happens to be the one an action cites this turn.
                         "planned_action": "<only if newly introducing it>"}}
 ]
 </goals>
+
+"content" is not fixed forever once a goal is introduced — resupply it
+for an existing goal id whenever your own more recent, confirmed
+results genuinely supersede what it originally said, and it will be
+updated, not silently ignored. This matters concretely: content is
+persisted and shown to you as settled fact, which is exactly right
+until the situation actually changes — a booking failing and being
+rebooked for a different date, a plan's assumptions turning out wrong,
+anything your own operations have since confirmed differently. When
+that happens, trust the more recent operational result (an
+operation_completed output, a percept you just received) over older
+content describing the original plan, and revise the content to match
+— don't let a stale description outrank what you've since actually
+confirmed. Omit "content" on an ordinary update-free turn; the existing
+value stays exactly as it was.
 
 An entry's "pending_trigger" is for committing now to a specific
 response for later, once some future condition is met (e.g. "when Greg

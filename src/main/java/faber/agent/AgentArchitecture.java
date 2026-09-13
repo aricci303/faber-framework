@@ -100,8 +100,46 @@ public class AgentArchitecture {
 		var percepts = sense();
 		String context = assembleContext(percepts);
 
-		var llmCallResult = llm.plan(SystemPrompt.systemPrompt, context);
-		var planResult = PlanResult.parse(llmCallResult.output());
+		// Retries the LLM call itself, not the whole cycle — percepts are captured once, above, and
+		// never re-sensed, since a failed parse must not cost the agent the very percepts that
+		// triggered this cycle. Only the call+parse step retries; each attempt's tokens are summed
+		// honestly into the final reported total, since real cost was spent on every attempt, not
+		// just the one that happened to succeed.
+		final int maxAttempts = 3;
+		String attemptContext = context;
+		LlmClient.LlmCallResult lastCallResult = null;
+		PlanResult planResult = null;
+		long sumInputNonCached = 0, sumCacheCreation = 0, sumCacheRead = 0, sumOutput = 0;
+
+		for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+			lastCallResult = llm.plan(SystemPrompt.systemPrompt, attemptContext);
+			sumInputNonCached += lastCallResult.numInputTokens();
+			sumCacheCreation += lastCallResult.cacheCreationInputTokens();
+			sumCacheRead += lastCallResult.cacheReadInputTokens();
+			sumOutput += lastCallResult.numOutputTokens();
+
+			try {
+				planResult = PlanResult.parse(lastCallResult.output());
+				break;
+			} catch (IllegalStateException parseError) {
+				if (attempt == maxAttempts) {
+					throw new IllegalStateException("Model output remained malformed after " + maxAttempts
+							+ " attempts — giving up rather than retry indefinitely. Last parse error: "
+							+ parseError.getMessage(), parseError);
+				}
+				System.out.println("[RETRY] cycle " + nextCycleToRun + ", attempt " + attempt
+						+ " produced malformed output (" + parseError.getMessage() + "). Retrying with feedback.");
+				attemptContext = context + "\n\n[NOTE: your previous response for this turn could not be "
+						+ "parsed and was entirely discarded — nothing from it was acted on or recorded, "
+						+ "so nothing is lost by trying again. The specific problem was: "
+						+ parseError.getMessage() + " Please produce a fresh, complete response in the "
+						+ "required <state_of_mind>/<goals>/<action> format, double-checking that every "
+						+ "JSON object and array you open is properly closed before you finish.]";
+			}
+		}
+
+		var llmCallResult = new LlmClient.LlmCallResult(
+				lastCallResult.output(), sumInputNonCached, sumOutput, sumCacheCreation, sumCacheRead);
 		stateOfMind.update(planResult.getStateOfMind());
 
 		var actResult = act(planResult.getActInfo());

@@ -27,6 +27,11 @@ import java.util.Map;
  *     still live in checkTriggerFidelity's own iteration, which walks
  *     the triggers map directly, producing confusing warnings for a
  *     commitment the agent had already, correctly, closed out.
+ *
+ *   - Goal content is no longer write-once. registerOrUpdate now lets
+ *     content supplied for an already-registered goal genuinely
+ *     revise it, not just be silently discarded — see that method's
+ *     own doc for the real run that exposed why this mattered.
  */
 public final class GoalLedger {
 
@@ -56,8 +61,29 @@ public final class GoalLedger {
     private final Map<String, PendingTrigger> triggers = new LinkedHashMap<>();
     private final Map<String, String> resolutions = new LinkedHashMap<>(); // goalId -> "achieved" | "dropped"
 
-    public String registerOrGet(String id, String contentIfNew) {
-        return goals.computeIfAbsent(id, k -> contentIfNew);
+    /**
+     * Registers a goal's content if new, or updates it if content is
+     * supplied for a goal that's already registered. This used to be
+     * write-once (computeIfAbsent, silently discarding any later
+     * content for the same id) — found to be a real, if unusual, bug
+     * class in its own right: a goal's persisted content is presented
+     * as fixed, authoritative ground truth, which is exactly right
+     * when nothing has changed, but wrong once the situation has
+     * genuinely moved on. A real run rebooked a flight after a booking
+     * failure, correctly adjusted a dependent hotel booking to match —
+     * then, a cycle later, reverted that correct adjustment because
+     * the goal's own content still described the original, now-stale
+     * plan, and there was no way to bring it up to date. Passing
+     * content == null leaves whatever's already stored untouched; this
+     * is the ordinary case, an entry with no content is not attempting
+     * to introduce or revise anything.
+     */
+    public void registerOrUpdate(String id, String content) {
+        if (content != null) {
+            goals.put(id, content);
+        } else {
+            goals.putIfAbsent(id, null);
+        }
     }
 
     public boolean isRegistered(String id) { return goals.containsKey(id); }

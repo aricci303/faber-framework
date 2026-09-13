@@ -6,6 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
+import com.anthropic.client.AnthropicClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.models.messages.CacheControlEphemeral;
 import com.anthropic.models.messages.Message;
@@ -44,14 +45,15 @@ public interface LlmClient {
     
     final class AnthropicLlmClient implements LlmClient {
         private final Model model;
+        private AnthropicClient client;
         
         public AnthropicLlmClient(Model model) {
         	this.model = model;
+            client = AnthropicOkHttpClient.fromEnv();
         }
 
         @Override
         public LlmCallResult plan(String systemPrompt, String context) throws IOException, InterruptedException {
-            var client = AnthropicOkHttpClient.fromEnv();
 
             // System.out.println("--------------------- CONTEXT: \n"+ context+"\n---------------------\n");
             
