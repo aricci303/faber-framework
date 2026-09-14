@@ -93,7 +93,7 @@ public final class PlanResult {
             	if (obj instanceof JSONObject) {
             		trigger = TriggerSpec.parse(((JSONObject) obj));
             	} else {
-            		System.err.println("ERROR: pending_trigger is not a JSONObjecy");
+            		System.err.println("ERROR: pending_trigger is not a JSON Object - " + obj);
             	}
             }
             return new GoalEntry(id, content, status, trigger);
@@ -105,18 +105,11 @@ public final class PlanResult {
     private final String stateOfMind;
     private final java.util.List<GoalEntry> goals;
     private final ActionInfo actInfo;
-    // public final ActionKind kind;
-    // public final JSONObject action;
-    // public final String actionGoalId;
 
     private PlanResult(String stateOfMind, java.util.List<GoalEntry> goals, ActionInfo actInfo) {
-                        // ActionKind kind, JSONObject action, String actionGoalId) {
         this.stateOfMind = stateOfMind;
         this.goals = goals;
         this.actInfo = actInfo;
-        // this.kind = kind;
-        // this.action = action;
-        // this.actionGoalId = actionGoalId;
     }
 
     private static final Pattern SOM = Pattern.compile("<state_of_mind>(.*?)</state_of_mind>", Pattern.DOTALL);

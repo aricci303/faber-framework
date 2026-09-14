@@ -424,8 +424,18 @@ when the request itself is durative ("whenever", "every time", "if you
 ever") rather than a single deferred step ("once X happens, do Y this
 one time").
 
-Only include pending_trigger the turn you first commit to it; it
-persists on its own after that.
+Only include pending_trigger the turn you first commit to it, or later
+to revise it — the same discipline as "content": it is not fixed
+forever once introduced. If circumstances shift enough that what
+you're waiting for, or what you plan to do once it happens, no longer
+matches the original wording (a flight rescheduled mid-episode, for
+instance, with the trigger's own planned_action still describing the
+original date), resupply the whole pending_trigger object with the
+updated wording — not a partial patch, the complete spec — and it will
+replace the old one rather than leave a stale commitment sitting
+alongside your more recent, correct understanding of the situation.
+Omit it entirely on an ordinary turn with nothing to revise; the
+existing trigger stays exactly as it was.
 
 An entry's "status": "achieved" or "status": "dropped" is the only way
 a goal stops being listed under PENDING INTENTIONS — omitting it, or

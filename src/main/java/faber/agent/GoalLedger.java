@@ -32,6 +32,12 @@ import java.util.Map;
  *     content supplied for an already-registered goal genuinely
  *     revise it, not just be silently discarded — see that method's
  *     own doc for the real run that exposed why this mattered.
+ *
+ *   - Pending triggers are no longer write-once either, for the same
+ *     reason and found the same way: a trigger's condition/
+ *     planned_action are shown back to the agent as settled fact,
+ *     which needs to mean they can be brought up to date, not that
+ *     they're frozen the moment they're first declared.
  */
 public final class GoalLedger {
 
@@ -90,9 +96,23 @@ public final class GoalLedger {
     public String contentOf(String id) { return goals.get(id); }
 
     /** Registers a pending trigger for a goal, if one doesn't already exist for it. */
+    /**
+     * Registers a goal's pending trigger if new, or genuinely revises
+     * it if a spec is resupplied for a goal that already has one — the
+     * same fix as registerOrUpdate's, applied to the sibling field it
+     * was originally missed on. A trigger's condition/planned_action
+     * are only ever presented to the agent as its own past commitment,
+     * exactly like goal content — leaving them write-once would have
+     * reproduced the identical failure mode goal content had, just for
+     * the trigger's free text instead: a flight rescheduled mid-episode
+     * with the trigger's own planned_action still describing the
+     * original date. A trigger is treated as one atomic unit here —
+     * revising it means resupplying the whole spec, not patching
+     * individual fields, the same discipline "content" already has.
+     */
     public void registerTrigger(String goalId, PlanResult.TriggerSpec spec) {
         if (goalId == null || spec == null || spec.condition == null || spec.plannedAction == null) return;
-        triggers.putIfAbsent(goalId, new PendingTrigger(goalId, spec.condition, spec.plannedAction,
+        triggers.put(goalId, new PendingTrigger(goalId, spec.condition, spec.plannedAction,
                 spec.signalArtifactId, spec.signalName, spec.signalValueContains, spec.recurring));
     }
 
