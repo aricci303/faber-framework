@@ -11,13 +11,13 @@ package faber.agent;
  *     a separate resolutions map — a real value nowhere, only
  *     inferred from where a key wasn't.
  *
- *   - As reported in a single cycle's <goal_changes> entry (see
- *     PlanResult.GoalEntry.status), only ACHIEVED or DROPPED is ever
+ *   - As reported in a single cycle's <intention_changes> entry (see
+ *     PlanResult.IntentionEntry.status), only ACHIEVED or DROPPED is ever
  *     legitimately written by the model — there is no well-formed way
  *     to *say* "still ongoing" each cycle, and requiring the model to
  *     restate it as a JSON field would trade real, recurring output
  *     cost for information PENDING INTENTIONS already reliably shows.
- *     A null GoalEntry.status therefore means "no status update this
+ *     A null IntentionEntry.status therefore means "no status update this
  *     turn," which is a genuinely different thing from ONGOING itself
  *     — the latter is a persistent ledger fact, not a per-turn claim.
  */

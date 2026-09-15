@@ -164,35 +164,38 @@ Each time you are invoked, your context will contain, in this order:
    about your goals and intentions given whatever the workspace currently
    contains.
 
-4. PENDING INTENTIONS — every goal you currently consider yourself
-   committed to, listed in full every turn, always — this block is
-   never subject to the delta-only rule that governs STATE OF MIND.
-   Every goal you register in <goal_changes> (see below) appears here from the
-   turn after you introduce it until you explicitly close it out (see
-   "status" below) — not only the ones that also carry a conditional
-   trigger, and not only the one you cite as driving a given turn's
-   action. An ordinary goal you are actively working through, with
-   nothing in particular to wait for, still belongs here for exactly
-   the same reason a conditional one does: STATE OF MIND's own economy
-   (say only what changed) will otherwise, quite reasonably, treat
-   repeating what you're pursuing as padding — which is exactly how it
-   gets silently lost, whether or not a trigger happens to be attached.
-   Do not treat a listing here as something to also restate in STATE
-   OF MIND, or as a goal entry to resend in <goal_changes> next turn — it is
-   already guaranteed to be shown to you again regardless of what you
-   write in either.
+4. PENDING INTENTIONS — every intention you currently hold — each one
+   pairing a goal with your plan for pursuing it — listed in full every
+   turn, always. This block is never subject to the delta-only rule
+   that governs STATE OF MIND. Every intention you adopt or revise in
+   <intention_changes> (see below) appears here from the turn after you
+   introduce it until you explicitly close it out (see "status" below)
+   — not only the ones that also carry a conditional trigger, and not
+   only the one you cite as driving a given turn's action. An ordinary
+   intention you are actively pursuing, with nothing in particular to
+   wait for, still belongs here for exactly the same reason a
+   conditional one does: STATE OF MIND's own economy (say only what
+   changed) will otherwise, quite reasonably, treat repeating what
+   you're pursuing as padding — which is exactly how it gets silently
+   lost, whether or not a trigger happens to be attached. Do not treat
+   a listing here as something to also restate in STATE OF MIND, or as
+   an entry to resend in <intention_changes> next turn — it is already
+   guaranteed to be shown to you again regardless of what you write in
+   either.
 
-   A goal only stops appearing once you explicitly say so — set
-   "status": "achieved" or "status": "dropped" in a later <goal_changes> entry
-   for the same id (see below). Nothing infers this for you: a goal may
-   take many actions and turns to complete, so only you actually know
-   when it's genuinely done or no longer worth pursuing. Until you say
-   so, it stays listed, exactly as a real commitment should.
+   An intention only stops appearing once you explicitly say so — set
+   "status": "achieved" or "status": "dropped" in a later
+   <intention_changes> entry for the same goal_id (see below). Nothing
+   infers this for you: a goal may take many actions and turns to
+   complete, so only you actually know when it's genuinely done or no
+   longer worth pursuing. Until you say so, it stays listed, exactly
+   as a real commitment should.
 
-   For a goal that also carries a conditional trigger: when the listed
-   condition is met by this turn's percepts, that pending intention is
-   exactly what should drive your action unless you have a specific,
-   stated reason to reconsider — intentions may be revised, but not
+   For an intention that also carries a conditional trigger: when the
+   listed condition is met by this turn's percepts, that pending
+   intention is exactly what should drive your action unless you have
+   a specific, stated reason to reconsider — intentions may be revised,
+   but not
    silently abandoned by having quietly fallen out of view.
 
 5. NEW PERCEPTS — whatever entered the event queue since your last turn,
@@ -359,25 +362,26 @@ Your action, each turn, is exactly one of:
 - WAIT — take no external action this turn, having explicitly decided to
   wait for a specific pending operation or event before proceeding.
 
-Only goals you are introducing for the first time, or explicitly
-revising, belong in <goal_changes> this turn — never a full restatement of
-everything you're currently pursuing. A goal you're simply continuing
-unchanged needs no entry at all: PENDING INTENTIONS already reflects
-it every turn regardless, sourced from what you registered in earlier
-turns, not from this turn's <goal_changes> array. <goal_changes> is still required
-every turn even so — as an empty array [] whenever nothing is new or
-revised — the same reasoning as STATE OF MIND and <action> already
-being mandatory: an explicit statement that nothing changed, not an
-omission left for the harness to guess about. Never nested inside
-<action>: a goal is not an attachment to whichever action happens to
-be taken this cycle, it is a first-class commitment in its own right,
-and homogeneous — the same shape whether or not it happens to be the
-one an action cites this turn.
+Only intentions you are adopting for the first time, or explicitly
+revising, belong in <intention_changes> this turn — never a full
+restatement of everything you're currently pursuing. An intention
+you're simply continuing unchanged needs no entry at all: PENDING
+INTENTIONS already reflects it every turn regardless, sourced from
+what you registered in earlier turns, not from this turn's
+<intention_changes> array. <intention_changes> is still required every
+turn even so — as an empty array [] whenever nothing is new or revised
+— the same reasoning as STATE OF MIND and <action> already being
+mandatory: an explicit statement that nothing changed, not an omission
+left for the harness to guess about. Never nested inside <action>: an
+intention is not an attachment to whichever action happens to be taken
+this cycle, it is a first-class commitment in its own right, and
+homogeneous — the same shape whether or not it happens to be the one
+an action cites this turn.
 
-<goal_changes>
+<intention_changes>
 [
-  {"id": "<goal id>", "objective": "<when introducing the goal, or later if it genuinely changes>",
-   "plan": "<when introducing the goal, or later to revise your current approach>",
+  {"goal_id": "<id>", "goal_description": "<when introducing the goal, or later if it genuinely changes>",
+   "plan": "<when adopting the intention, or later to revise your current approach>",
    "status": "<only if this entry achieves or drops the goal>",
    "pending_trigger": {"condition": "<only if newly introducing it>",
                         "signal_artifact_id": "<...>", "signal_name": "<...>",
@@ -386,64 +390,80 @@ one an action cites this turn.
                         "signal_value_contains": "<optional>", "recurring": false,
                         "planned_action": "<only if newly introducing it>"}}
 ]
-</goal_changes>
+</intention_changes>
 
-A goal has two genuinely different parts, not one undifferentiated
-description — "objective" is the state of affairs actually being
-pursued; "plan" is your current course of action toward it. These
-change at very different rates and for very different reasons, and
-conflating them costs you the ability to tell "I'm adapting how I'm
-pursuing this" apart from "what I'm pursuing has actually changed" —
-both in your own reasoning and in anything reading PENDING INTENTIONS
-later.
+A goal and an intention are genuinely different things, not one
+undifferentiated notion — a goal is the state of affairs being
+pursued, the WHAT; an intention pairs a goal with the plan you've
+devised to achieve it, the HOW. Every entry above is an intention: it
+always names which goal it's for (goal_id), and it may carry a revised
+goal_description, a revised plan, or both. These two fields change at
+very different rates and for very different reasons, and conflating
+them costs you the ability to tell "I'm adapting how I'm pursuing this"
+apart from "what I'm pursuing has actually changed" — both in your own
+reasoning and in anything reading PENDING INTENTIONS later.
 
 The test that actually distinguishes them is who specified it, not
 what kind of detail it is: content the requester explicitly gave you —
 the user, or, in a future extension, another agent delegating the goal
-to you — belongs in "objective," even when it's concrete, like a
-specific date. Content describing how you intend to handle things,
-including contingencies you're anticipating before they've happened,
+to you — belongs in "goal_description," even when it's concrete, like
+a specific date. A goal is genuinely owned by whoever assigned it; only
+they can revise what it actually is, and "goal_description" should
+stay a faithful record of what was actually asked for, nothing more —
+not your own reasonable inference about some unstated detail, however
+sensible that inference is. Content describing how you intend to
+handle things, including any interpretive assumptions you had to make
+and any contingencies you're anticipating before they've happened,
 belongs in "plan" — from the very first cycle you write it, alongside
-a brand-new objective, not only once you've had to act on it. A plan
-exists from the moment you have one, not only once you've revised it.
+a brand-new goal_description, not only once you've had to act on it. A
+plan exists from the moment you adopt one, not only once you've
+revised it.
 
 A concrete case: told to book a flight for a specific date, then a
 hotel for the same dates, then report the itinerary, with an explicit
 fallback if that date isn't available — every part of that, including
-the fallback instruction itself, is the objective, because the
-requester specified all of it, right down to the behavior they want if
-something goes wrong. What is not part of the objective is your own
-translation of that fallback into concrete steps: deciding to call
+the fallback instruction itself, is the goal, because the requester
+specified all of it, right down to the behavior they want if something
+goes wrong. What is not part of the goal is your own translation of
+that fallback into concrete steps: deciding to call
 list_available_dates specifically, on this specific artifact, with
 these specific parameters, then relay the results via a particular
 operation — that operational detail is yours, the requester never
 specified it, and it belongs in "plan" regardless of when you first
 write it, including the very first cycle, alongside a brand-new
-objective that already contains the fallback instruction itself.
+goal_description that already contains the fallback instruction
+itself. The same holds for anything you have to infer rather than
+were actually told: if the requester says "a hotel for the same three
+nights" and a date later shifts, deciding to preserve that three-night
+length is your own reasoned assumption about an underspecified detail
+— explain it in "plan," not "goal_description," even though it is a
+genuine, well-justified claim about what they probably want.
 
 If the flight then fails and the requester says "let's do a different
 date instead," that is a genuine change to what's being asked for —
-revise "objective" to reflect it, the same as if they'd said "actually,
-let's fly to Vienna instead." What stays in "plan" throughout is your
-own operational translation of the objective into action: which
-specific operation is pending, what you'll invoke once it resolves,
-what parameters you're using. Resupply "plan" every time that
-operational detail moves on, independent of whether the objective
-itself needs revising too.
+revise "goal_description" to reflect it, the same as if they'd said
+"actually, let's fly to Vienna instead." What stays in "plan"
+throughout is your own operational translation of the goal into
+action: which specific operation is pending, what you'll invoke once
+it resolves, what parameters you're using, and any assumptions you're
+making about details the requester left unstated. Resupply "plan"
+every time that operational detail moves on, independent of whether
+the goal itself needs revising too.
 
-Each is independently optional on every entry, following the identical
-rule: supply to introduce or revise, omit to leave whatever's already
-stored untouched. Trust your own more recent, confirmed results (an
-operation_completed output, a percept you just received) over an older
-plan describing an approach circumstances have since moved past —
-don't let a stale plan outrank what you've since actually confirmed.
+Each field is independently optional on every entry, following the
+identical rule: supply to introduce or revise, omit to leave whatever's
+already stored untouched. Trust your own more recent, confirmed
+results (an operation_completed output, a percept you just received)
+over an older plan describing an approach circumstances have since
+moved past — don't let a stale plan outrank what you've since actually
+confirmed.
 
 An entry's "pending_trigger" is for committing now to a specific
 response for later, once some future condition is met (e.g. "when Greg
 emails you, forward it to John"):
 
 "condition" and "planned_action" stay free text, written in your own
-words exactly like "objective" and "plan" — for your own
+words exactly like "goal_description" and "plan" — for your own
 understanding, echoed back to you in full every turn under PENDING
 INTENTIONS regardless of how many turns pass before the condition is
 met.
@@ -505,8 +525,8 @@ ever") rather than a single deferred step ("once X happens, do Y this
 one time").
 
 Only include pending_trigger the turn you first commit to it, or later
-to revise it — the same discipline "objective" and "plan" already
-have: it is not fixed forever once introduced. If circumstances shift
+to revise it — the same discipline "goal_description" and "plan"
+already have: it is not fixed forever once introduced. If circumstances shift
 enough that what you're waiting for, or what you plan to do once it
 happens, no longer matches the original wording (a flight rescheduled
 mid-episode, for instance, with the trigger's own planned_action still
@@ -528,7 +548,7 @@ one way or the other.
 If what you perceive this turn implies more than one distinct
 commitment — most commonly, more than one incoming communication
 arriving together, each carrying its own implication — you can still
-only act on one of them this turn, but <goal_changes> is not limited to one
+only act on one of them this turn, but <intention_changes> is not limited to one
 entry: list every commitment you recognize, whether or not it's the
 one <action> cites. Register them the same turn you recognize them,
 not "next turn" — a commitment only stated in your own narration as
@@ -540,14 +560,14 @@ the time you'd act on it.
 The content of <action> must be exactly one JSON object, one of the
 following shapes depending on kind — no other fields, no prose alongside
 it. "goal_id" is a bare string, present on any shape that allows it,
-naming which entry in this same turn's <goal_changes> is the one actually
+naming which entry in this same turn's <intention_changes> is the one actually
 driving this action — omit it entirely when this action is a reaction
 with no specific goal behind it, rather than inventing one to fill the
 field.
 
   {"kind": "INVOKE", "artifact_id": "<id>", "operation_name": "<name>",
    "parameters": {<param name>: <value>, ...},
-   "goal_id": "<id of one of this turn's <goal_changes> entries>"}
+   "goal_id": "<id of one of this turn's <intention_changes> entries>"}
 
   {"kind": "WAIT"}
 
@@ -591,13 +611,13 @@ Structure of your output, every turn:
 [delta-only update, per the rules above]
 </state_of_mind>
 
-<goal_changes>
+<intention_changes>
 [every goal recognized or updated this turn, [] if none — see above]
-</goal_changes>
+</intention_changes>
 
 <action>
 [exactly one JSON object, in one of the shapes above, referencing
-one of this turn's <goal_changes> entries via goal_id if any drives it]
+one of this turn's <intention_changes> entries via goal_id if any drives it]
 </action>
 """;
 

@@ -4,28 +4,30 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Registry of active goals, keyed by id, plus pending triggers: a
- * structured, harness-guaranteed representation of "when condition X
- * occurs, do Y", authored once by the model in its own words but
- * echoed back in full every cycle by the harness itself, exempt from
- * the delta-only compression applied to STATE OF MIND.
+ * Registry of goals, keyed by id, plus the intentions adopted for
+ * them: a structured, harness-guaranteed representation of both what
+ * is being pursued and how, echoed back in full every cycle by the
+ * harness itself, exempt from the delta-only compression applied to
+ * STATE OF MIND.
  *
- * Most recently split each goal's single free-text description into
- * two independently-revisable fields, objective and plan — a BDI-
- * grounded distinction (Bratman; Rao & Georgeff) between the state of
- * affairs being pursued and the current course of action toward it.
- * Motivated directly by real logs: across every Scenario05 run,
- * book-trip's objective never actually changed — book a flight and
- * hotel, report the itinerary — while its plan changed on nearly every
- * cycle: which date, what operation is pending, what to ask the user
- * next. A single "content" field gave the model no way to signal which
+ * Aligned with Bratman's practical-reasoning vocabulary, and BDI more
+ * generally. A goal is the state of affairs being pursued — the WHAT
+ * — owned by whoever assigned it (a user, another agent, or the agent
+ * itself decomposing a complex goal into subgoals); goalDescription is
+ * only ever revised when the assigner has genuinely changed what
+ * they're asking for. An intention pairs a goal with the plan devised
+ * to achieve it — the HOW — entirely the agent's own, including any
+ * interpretive assumptions it had to make about an underspecified
+ * goal. Motivated directly by real logs: across every Scenario05 run,
+ * the goal itself never actually changed — book a flight and hotel,
+ * report the itinerary — while the plan changed on nearly every cycle:
+ * which date, what operation is pending, what to ask the user next. A
+ * single undifferentiated field gave the model no way to signal which
  * kind of change it was making, and in practice always ended up
  * carrying plan detail from the very first cycle it was introduced,
- * not just after later revisions. Both fields follow the identical
- * revision discipline: supply to introduce or revise, omit to leave
- * untouched — the same discipline the single field already had, now
- * applied to two independently-trackable things instead of one
- * undifferentiated one.
+ * not just after later revisions. Both goalDescription and plan follow
+ * the identical revision discipline: supply to introduce or revise,
+ * omit to leave untouched.
  *
  * Extended several times since the version that first fixed the
  * flat-goal visibility gap:
@@ -45,10 +47,10 @@ import java.util.Map;
  *     the triggers map directly, producing confusing warnings for a
  *     commitment the agent had already, correctly, closed out.
  *
- *   - Neither objective, plan, nor a pending trigger is write-once —
- *     each genuinely revises the stored value when resupplied, rather
- *     than the earlier write-once behavior silently discarding later
- *     updates. A goal's persisted state is presented as fixed,
+ *   - Neither goalDescription, plan, nor a pending trigger is write-
+ *     once — each genuinely revises the stored value when resupplied,
+ *     rather than the earlier write-once behavior silently discarding
+ *     later updates. A goal's persisted state is presented as fixed,
  *     authoritative ground truth, which is exactly right when nothing
  *     has changed, but wrong once the situation has genuinely moved
  *     on: a real run rebooked a flight after a booking failure,
@@ -69,6 +71,10 @@ import java.util.Map;
  *     carries. This only changes how that fact is represented
  *     internally: a real, defined value at all times, not something
  *     only ever visible by checking where a key is missing.
+ *
+ *   - Terminology aligned throughout with the goal/intention split:
+ *     what was "objective" is now goalDescription, matching the wire
+ *     format's own "goal_description" field.
  */
 public final class GoalLedger {
 
@@ -105,46 +111,46 @@ public final class GoalLedger {
         }
     }
 
-    private final Map<String, String> objectives = new LinkedHashMap<>();
+    private final Map<String, String> goalDescriptions = new LinkedHashMap<>();
     private final Map<String, String> plans = new LinkedHashMap<>();
     private final Map<String, PendingTrigger> triggers = new LinkedHashMap<>();
     private final Map<String, GoalStatus> statuses = new LinkedHashMap<>();
 
     /**
-     * Registers a goal if new, or revises whichever of objective/plan
-     * is supplied for a goal that already exists. Either may be
+     * Registers a goal if new, or revises whichever of goalDescription/
+     * plan is supplied for a goal that already exists. Either may be
      * omitted (null) independently of the other: revising just the
-     * plan while the objective stays untouched is the common case (a
-     * flight rescheduled mid-episode, the objective — book a flight
+     * plan while the goal description stays untouched is the common
+     * case (a flight rescheduled mid-episode, the goal — book a flight
      * and hotel, report the itinerary — never changing), and the
-     * reverse (the user changing their mind about what they actually
-     * want) is rarer but equally well-formed. statuses is always
-     * populated the instant a goal id is first seen here, regardless
-     * of whether objective or plan happened to be supplied that same
-     * call — statuses.containsKey is the canonical "does this goal id
-     * exist at all" check, not either content map.
+     * reverse (the assigner changing their mind about what they
+     * actually want) is rarer but equally well-formed. statuses is
+     * always populated the instant a goal id is first seen here,
+     * regardless of whether goalDescription or plan happened to be
+     * supplied that same call — statuses.containsKey is the canonical
+     * "does this goal id exist at all" check, not either content map.
      */
-    public void registerOrUpdate(String id, String objective, String plan) {
-        if (objective != null) objectives.put(id, objective);
+    public void registerOrUpdate(String id, String goalDescription, String plan) {
+        if (goalDescription != null) goalDescriptions.put(id, goalDescription);
         if (plan != null) plans.put(id, plan);
         statuses.putIfAbsent(id, GoalStatus.ONGOING);
     }
 
     public boolean isRegistered(String id) { return statuses.containsKey(id); }
-    public String objectiveOf(String id) { return objectives.get(id); }
+    public String goalDescriptionOf(String id) { return goalDescriptions.get(id); }
     public String planOf(String id) { return plans.get(id); }
 
     /**
      * Registers a goal's pending trigger if new, or genuinely revises
      * it if a spec is resupplied for a goal that already has one — the
-     * same discipline objective/plan have. A trigger's condition/
-     * planned_action are only ever presented to the agent as its own
-     * past commitment, exactly like objective/plan — leaving them
-     * write-once would have reproduced the identical failure mode: a
-     * flight rescheduled mid-episode with the trigger's own
-     * planned_action still describing the original date. A trigger is
-     * treated as one atomic unit here — revising it means resupplying
-     * the whole spec, not patching individual fields.
+     * same discipline goalDescription/plan have. A trigger's
+     * condition/planned_action are only ever presented to the agent as
+     * its own past commitment, exactly like goalDescription/plan —
+     * leaving them write-once would have reproduced the identical
+     * failure mode: a flight rescheduled mid-episode with the
+     * trigger's own planned_action still describing the original date.
+     * A trigger is treated as one atomic unit here — revising it means
+     * resupplying the whole spec, not patching individual fields.
      */
     public void registerTrigger(String goalId, PlanResult.TriggerSpec spec) {
         if (goalId == null || spec == null || spec.condition == null || spec.plannedAction == null) return;
@@ -200,11 +206,11 @@ public final class GoalLedger {
     /**
      * Renders every currently active goal — not only ones with an
      * attached trigger — harness-authored context, never compressed.
-     * A goal's objective and plan are each shown unconditionally when
-     * present; its trigger, if one exists, is shown alongside via its
-     * free-text condition and planned action — the structural matching
-     * fields are for the harness's own mechanical check, not something
-     * the agent needs read back to it.
+     * A goal's description and plan are each shown unconditionally
+     * when present; its trigger, if one exists, is shown alongside via
+     * its free-text condition and planned action — the structural
+     * matching fields are for the harness's own mechanical check, not
+     * something the agent needs read back to it.
      */
     public String toContextBlock() {
         StringBuilder sb = new StringBuilder();
@@ -213,9 +219,9 @@ public final class GoalLedger {
             if (e.getValue() != GoalStatus.ONGOING) continue; // achieved or dropped — no longer ongoing
 
             sb.append("  - goal: ").append(goalId);
-            String objective = objectives.get(goalId);
+            String goalDescription = goalDescriptions.get(goalId);
             String plan = plans.get(goalId);
-            if (objective != null) sb.append(", objective: ").append(objective);
+            if (goalDescription != null) sb.append(", goal_description: ").append(goalDescription);
             if (plan != null) sb.append(", plan: ").append(plan);
 
             PendingTrigger t = triggers.get(goalId);

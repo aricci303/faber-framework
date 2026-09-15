@@ -88,7 +88,7 @@ public class Agent {
          	if (logCycle) {
 	            System.out.print("*** ENVIRONMENT   ***\n" + agentArch.dumpLightContext());
 	            System.out.print("*** STATE OF MIND ***\n" + cycleResult.stateOfMind());    		//
-	            System.out.print("*** CHANGES ABOUT GOALS ***\n" + agentArch.dumpLastCycleGoalChanges());
+	            System.out.print("*** INTENTION CHANGES ***\n" + agentArch.dumpLastCycleIntentionChanges());
 	            System.out.println("*** ACTION COMMITTED ***\n" + cycleResult.actResult().act());
 	            System.out.println("*** LLM CALL ***");
 	            System.out.println("- input tokens (non-cached): " + cycleResult.llmCallResult().numInputTokens());

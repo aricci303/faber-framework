@@ -157,11 +157,12 @@ public class AgentArchitecture {
 			groundedSource.add(p.toContextLine());
 		WellFormedness.Result wf = WellFormedness.check(tuple, groundedSource, goalLedger);
 
-		// C1's keyword-overlap check wants whichever of objective/plan the model actually supplied —
-		// an action's own justification typically cites specific plan detail (an operation, a date) at
-		// least as often as the more abstract objective, so both are combined rather than picking one.
-		String goalContent = tuple.isReactive() ? null : combineObjectiveAndPlan(
-				goalLedger.objectiveOf(tuple.G), goalLedger.planOf(tuple.G));
+		// C1's keyword-overlap check wants whichever of goal description/plan the model actually
+		// supplied — an action's own justification typically cites specific plan detail (an
+		// operation, a date) at least as often as the more abstract goal, so both are combined
+		// rather than picking one.
+		String goalContent = tuple.isReactive() ? null : combineGoalDescriptionAndPlan(
+				goalLedger.goalDescriptionOf(tuple.G), goalLedger.planOf(tuple.G));
 		Coherence.Result coherence = Coherence.check(tuple, previousTuple, goalContent, false);
 
 		previousTuple = tuple;
@@ -243,21 +244,23 @@ public class AgentArchitecture {
 		return sb.toString();
 	}
 	
-	public String dumpLastCycleGoalChanges() {
+	public String dumpLastCycleIntentionChanges() {
 		StringBuilder sb = new StringBuilder();
 		var planRes = lastCycleResult.planResult();
-		if (planRes.getGoals().size() > 0) {
-			for (var g: planRes.getGoals()) {
-				sb.append("- " + g.id);
-				sb.append(" - status: " + (g.status != null ? g.status.toJsonValue() : "(no update this turn)"));
-				if (g.objective != null) {
-					sb.append(" - objective: " + g.objective);
+		if (planRes.getIntentionChanges().size() > 0) {
+			for (var g: planRes.getIntentionChanges()) {
+				sb.append("- goal id: " + g.goalId);
+				if (g.status != null) {
+					sb.append("\n - status: " + g.status.toJsonValue());
+				}
+				if (g.goalDescription != null) {
+					sb.append("\n - goal_description: " + g.goalDescription);
 				}
 				if (g.plan != null) {
-					sb.append(" - plan: " + g.plan);
+					sb.append("\n - plan: " + g.plan);
 				}
 				if (g.trigger != null) {
-					sb.append(" - trigger: condition=" + g.trigger.condition
+					sb.append("\n - trigger: condition=" + g.trigger.condition
 							+ ", signal=" + g.trigger.signalArtifactId + "/" + g.trigger.signalName
 							+ ", operation_name=" + g.trigger.operationName
 							+ ", value_contains=" + g.trigger.signalValueContains
@@ -349,14 +352,14 @@ public class AgentArchitecture {
 	 * human/audit process, not enforced online.
 	 *
 	 * "Addressed" also recognizes a second, independent path, found necessary
-	 * from a real run: this method runs before the same cycle's <goal_changes> array is
+	 * from a real run: this method runs before the same cycle's <intention_changes> array is
 	 * processed into the ledger (that happens later, in the extractor), so it
 	 * previously had no way to see that the model had already resolved the
-	 * trigger's goal via "status" in <goal_changes> this very cycle — even when the
+	 * trigger's goal via "status" in <intention_changes> this very cycle — even when the
 	 * action itself (e.g. a plain send_msg_to_user reporting the outcome) never
 	 * cited that goal_id. The goal got closed out correctly; only the audit was
 	 * blind to it, producing a false-positive warning for a genuinely-addressed
-	 * commitment. Checking result.getGoals() directly, before it's processed,
+	 * commitment. Checking result.getIntentionChanges() directly, before it's processed,
 	 * closes that gap without weakening the check for a genuinely-ignored
 	 * trigger — one with neither an action citation nor a status update has
 	 * addressed nothing, and still warns exactly as before.
@@ -368,7 +371,7 @@ public class AgentArchitecture {
 				continue;
 
 			boolean addressedByAction = trigger.goalId.equals(result.getActInfo().goalId());
-			boolean addressedByResolution = resolvedInGoalsThisCycle(trigger.goalId, result.getGoals());
+			boolean addressedByResolution = resolvedInIntentionChangesThisCycle(trigger.goalId, result.getIntentionChanges());
 			boolean addressed = addressedByAction || addressedByResolution;
 			if (addressed) {
 				goalLedger.resolveTrigger(trigger.goalId);
@@ -383,18 +386,18 @@ public class AgentArchitecture {
 		}
 	}
 
-	/** Joins whichever of objective/plan is present into one string for C1's keyword-overlap check. */
-	private static String combineObjectiveAndPlan(String objective, String plan) {
-		if (objective == null && plan == null) return null;
-		if (objective == null) return plan;
-		if (plan == null) return objective;
-		return objective + " " + plan;
+	/** Joins whichever of goal description/plan is present into one string for C1's keyword-overlap check. */
+	private static String combineGoalDescriptionAndPlan(String goalDescription, String plan) {
+		if (goalDescription == null && plan == null) return null;
+		if (goalDescription == null) return plan;
+		if (plan == null) return goalDescription;
+		return goalDescription + " " + plan;
 	}
 
-	/** True if this cycle's <goal_changes> array includes a status change (achieved/dropped) for this goal id. */
-	private static boolean resolvedInGoalsThisCycle(String goalId, List<PlanResult.GoalEntry> goals) {
-		for (PlanResult.GoalEntry g : goals) {
-			if (goalId.equals(g.id) && g.status != null) return true;
+	/** True if this cycle's <intention_changes> array includes a status change (achieved/dropped) for this goal id. */
+	private static boolean resolvedInIntentionChangesThisCycle(String goalId, List<PlanResult.IntentionEntry> intentionChanges) {
+		for (PlanResult.IntentionEntry g : intentionChanges) {
+			if (goalId.equals(g.goalId) && g.status != null) return true;
 		}
 		return false;
 	}

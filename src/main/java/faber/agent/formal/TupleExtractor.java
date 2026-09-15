@@ -33,15 +33,15 @@ public interface TupleExtractor {
             	W.add(p.toContextLine());
             }
 
-            // Every goal in <goal_changes> is registered/updated identically, whether or not it's the one
-            // driving this cycle's action — first-class, not an attachment to whichever action happens
-            // to be taken this cycle. registerOrUpdate handles both first introduction and later
-            // content revision; omitting content on a later entry leaves the existing value untouched.
-            for (PlanResult.GoalEntry g : planResult.getGoals()) {
-                if (g.id == null) continue;
-                ledger.registerOrUpdate(g.id, g.objective, g.plan);
-                ledger.registerTrigger(g.id, g.trigger);
-                ledger.resolveGoal(g.id, g.status);
+            // Every intention in <intention_changes> is registered/updated identically, whether or not
+            // it's the one driving this cycle's action — first-class, not an attachment to whichever
+            // action happens to be taken this cycle. registerOrUpdate handles both first introduction
+            // and later revision; omitting a field on a later entry leaves the existing value untouched.
+            for (PlanResult.IntentionEntry g : planResult.getIntentionChanges()) {
+                if (g.goalId == null) continue;
+                ledger.registerOrUpdate(g.goalId, g.goalDescription, g.plan);
+                ledger.registerTrigger(g.goalId, g.trigger);
+                ledger.resolveGoal(g.goalId, g.status);
             }
 
             var goalId = planResult.getActInfo().goalId();
