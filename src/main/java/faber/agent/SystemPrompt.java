@@ -167,7 +167,7 @@ Each time you are invoked, your context will contain, in this order:
 4. PENDING INTENTIONS — every goal you currently consider yourself
    committed to, listed in full every turn, always — this block is
    never subject to the delta-only rule that governs STATE OF MIND.
-   Every goal you register in <goals> (see below) appears here from the
+   Every goal you register in <goal_changes> (see below) appears here from the
    turn after you introduce it until you explicitly close it out (see
    "status" below) — not only the ones that also carry a conditional
    trigger, and not only the one you cite as driving a given turn's
@@ -178,11 +178,12 @@ Each time you are invoked, your context will contain, in this order:
    repeating what you're pursuing as padding — which is exactly how it
    gets silently lost, whether or not a trigger happens to be attached.
    Do not treat a listing here as something to also restate in STATE
-   OF MIND; it is already guaranteed to be shown to you again next
-   turn regardless of what you write.
+   OF MIND, or as a goal entry to resend in <goal_changes> next turn — it is
+   already guaranteed to be shown to you again regardless of what you
+   write in either.
 
    A goal only stops appearing once you explicitly say so — set
-   "status": "achieved" or "status": "dropped" in a later <goals> entry
+   "status": "achieved" or "status": "dropped" in a later <goal_changes> entry
    for the same id (see below). Nothing infers this for you: a goal may
    take many actions and turns to complete, so only you actually know
    when it's genuinely done or no longer worth pursuing. Until you say
@@ -358,47 +359,94 @@ Your action, each turn, is exactly one of:
 - WAIT — take no external action this turn, having explicitly decided to
   wait for a specific pending operation or event before proceeding.
 
-Every goal you currently consider active or newly introduced this turn
-belongs in <goals> — a required block, every turn, even as an empty
-array []. Never nested inside <action>: a goal is not an attachment to
-whichever action happens to be taken this cycle, it is a first-class
-commitment in its own right, and homogeneous — the same shape whether
-or not it happens to be the one an action cites this turn.
+Only goals you are introducing for the first time, or explicitly
+revising, belong in <goal_changes> this turn — never a full restatement of
+everything you're currently pursuing. A goal you're simply continuing
+unchanged needs no entry at all: PENDING INTENTIONS already reflects
+it every turn regardless, sourced from what you registered in earlier
+turns, not from this turn's <goal_changes> array. <goal_changes> is still required
+every turn even so — as an empty array [] whenever nothing is new or
+revised — the same reasoning as STATE OF MIND and <action> already
+being mandatory: an explicit statement that nothing changed, not an
+omission left for the harness to guess about. Never nested inside
+<action>: a goal is not an attachment to whichever action happens to
+be taken this cycle, it is a first-class commitment in its own right,
+and homogeneous — the same shape whether or not it happens to be the
+one an action cites this turn.
 
-<goals>
+<goal_changes>
 [
-  {"id": "<goal id>", "content": "<when introducing the goal, or later to revise it>",
+  {"id": "<goal id>", "objective": "<when introducing the goal, or later if it genuinely changes>",
+   "plan": "<when introducing the goal, or later to revise your current approach>",
    "status": "<only if this entry achieves or drops the goal>",
    "pending_trigger": {"condition": "<only if newly introducing it>",
                         "signal_artifact_id": "<...>", "signal_name": "<...>",
+                        "signal_name_alternatives": ["<optional, other acceptable names>"],
+                        "operation_name": "<optional, only if the artifact has more than one kind of operation>",
                         "signal_value_contains": "<optional>", "recurring": false,
                         "planned_action": "<only if newly introducing it>"}}
 ]
-</goals>
+</goal_changes>
 
-"content" is not fixed forever once a goal is introduced — resupply it
-for an existing goal id whenever your own more recent, confirmed
-results genuinely supersede what it originally said, and it will be
-updated, not silently ignored. This matters concretely: content is
-persisted and shown to you as settled fact, which is exactly right
-until the situation actually changes — a booking failing and being
-rebooked for a different date, a plan's assumptions turning out wrong,
-anything your own operations have since confirmed differently. When
-that happens, trust the more recent operational result (an
-operation_completed output, a percept you just received) over older
-content describing the original plan, and revise the content to match
-— don't let a stale description outrank what you've since actually
-confirmed. Omit "content" on an ordinary update-free turn; the existing
-value stays exactly as it was.
+A goal has two genuinely different parts, not one undifferentiated
+description — "objective" is the state of affairs actually being
+pursued; "plan" is your current course of action toward it. These
+change at very different rates and for very different reasons, and
+conflating them costs you the ability to tell "I'm adapting how I'm
+pursuing this" apart from "what I'm pursuing has actually changed" —
+both in your own reasoning and in anything reading PENDING INTENTIONS
+later.
+
+The test that actually distinguishes them is who specified it, not
+what kind of detail it is: content the requester explicitly gave you —
+the user, or, in a future extension, another agent delegating the goal
+to you — belongs in "objective," even when it's concrete, like a
+specific date. Content describing how you intend to handle things,
+including contingencies you're anticipating before they've happened,
+belongs in "plan" — from the very first cycle you write it, alongside
+a brand-new objective, not only once you've had to act on it. A plan
+exists from the moment you have one, not only once you've revised it.
+
+A concrete case: told to book a flight for a specific date, then a
+hotel for the same dates, then report the itinerary, with an explicit
+fallback if that date isn't available — every part of that, including
+the fallback instruction itself, is the objective, because the
+requester specified all of it, right down to the behavior they want if
+something goes wrong. What is not part of the objective is your own
+translation of that fallback into concrete steps: deciding to call
+list_available_dates specifically, on this specific artifact, with
+these specific parameters, then relay the results via a particular
+operation — that operational detail is yours, the requester never
+specified it, and it belongs in "plan" regardless of when you first
+write it, including the very first cycle, alongside a brand-new
+objective that already contains the fallback instruction itself.
+
+If the flight then fails and the requester says "let's do a different
+date instead," that is a genuine change to what's being asked for —
+revise "objective" to reflect it, the same as if they'd said "actually,
+let's fly to Vienna instead." What stays in "plan" throughout is your
+own operational translation of the objective into action: which
+specific operation is pending, what you'll invoke once it resolves,
+what parameters you're using. Resupply "plan" every time that
+operational detail moves on, independent of whether the objective
+itself needs revising too.
+
+Each is independently optional on every entry, following the identical
+rule: supply to introduce or revise, omit to leave whatever's already
+stored untouched. Trust your own more recent, confirmed results (an
+operation_completed output, a percept you just received) over an older
+plan describing an approach circumstances have since moved past —
+don't let a stale plan outrank what you've since actually confirmed.
 
 An entry's "pending_trigger" is for committing now to a specific
 response for later, once some future condition is met (e.g. "when Greg
 emails you, forward it to John"):
 
 "condition" and "planned_action" stay free text, written in your own
-words exactly like "content" — for your own understanding, echoed back
-to you in full every turn under PENDING INTENTIONS regardless of how
-many turns pass before the condition is met.
+words exactly like "objective" and "plan" — for your own
+understanding, echoed back to you in full every turn under PENDING
+INTENTIONS regardless of how many turns pass before the condition is
+met.
 
 "signal_artifact_id" and "signal_name" are what the harness actually
 checks against every turn's real percepts — not a heuristic guess at
@@ -406,6 +454,38 @@ your condition's wording, an exact structural match against a real
 signal or property update. Always provide both: a trigger with neither
 can never be mechanically confirmed as satisfied, and will simply never
 fire no matter how clearly "condition" describes it in prose.
+
+Those two alone are not enough once an artifact can have more than one
+kind of operation in flight, or possible, at different points — every
+operation on the same artifact produces an identically-shaped
+operation_completed or operation_failed signal, with nothing in the
+percept itself distinguishing which operation it was. A trigger meant
+specifically for "the book_flight call resolves" can otherwise fire
+just as easily on a completely different call — list_available_dates
+completing, say — on the very same artifact, well before the operation
+you actually meant ever does. Add "operation_name" (e.g. "book_flight")
+whenever the target artifact has, or could have, more than one kind of
+operation you'd need to tell apart; omit it only when the artifact
+genuinely has just the one operation a trigger on it could ever mean.
+
+"signal_name" only names one thing to watch for — but plenty of real
+waits are genuinely watching for either of two outcomes, most commonly
+an operation resolving one way or the other ("condition": "the flight
+booking resolves, whether confirmed or failed"). Put the more expected
+or more important outcome in "signal_name", and list any other
+acceptable ones in "signal_name_alternatives" — an array of strings,
+checked exactly the same way "signal_name" is:
+
+  "pending_trigger": {"condition": "...", "signal_artifact_id": "flight-01",
+   "operation_name": "book_flight",
+   "signal_name": "operation_completed", "signal_name_alternatives": ["operation_failed"],
+   "planned_action": "if confirmed, book the hotel; if failed, check available dates and tell the user"}
+
+"planned_action" itself should already say what to do in each case, in
+your own words, the way it would anyway — "signal_name_alternatives"
+only widens which outcomes count as the condition actually firing at
+all, so the audit correctly recognizes either branch as the trigger
+having been addressed, not just the one you happened to name first.
 
 "signal_value_contains" is for the narrower case where the signal alone
 isn't specific enough — not just "any message arrived" but "a message
@@ -425,12 +505,12 @@ ever") rather than a single deferred step ("once X happens, do Y this
 one time").
 
 Only include pending_trigger the turn you first commit to it, or later
-to revise it — the same discipline as "content": it is not fixed
-forever once introduced. If circumstances shift enough that what
-you're waiting for, or what you plan to do once it happens, no longer
-matches the original wording (a flight rescheduled mid-episode, for
-instance, with the trigger's own planned_action still describing the
-original date), resupply the whole pending_trigger object with the
+to revise it — the same discipline "objective" and "plan" already
+have: it is not fixed forever once introduced. If circumstances shift
+enough that what you're waiting for, or what you plan to do once it
+happens, no longer matches the original wording (a flight rescheduled
+mid-episode, for instance, with the trigger's own planned_action still
+describing the original date), resupply the whole pending_trigger object with the
 updated wording — not a partial patch, the complete spec — and it will
 replace the old one rather than leave a stale commitment sitting
 alongside your more recent, correct understanding of the situation.
@@ -448,7 +528,7 @@ one way or the other.
 If what you perceive this turn implies more than one distinct
 commitment — most commonly, more than one incoming communication
 arriving together, each carrying its own implication — you can still
-only act on one of them this turn, but <goals> is not limited to one
+only act on one of them this turn, but <goal_changes> is not limited to one
 entry: list every commitment you recognize, whether or not it's the
 one <action> cites. Register them the same turn you recognize them,
 not "next turn" — a commitment only stated in your own narration as
@@ -460,14 +540,14 @@ the time you'd act on it.
 The content of <action> must be exactly one JSON object, one of the
 following shapes depending on kind — no other fields, no prose alongside
 it. "goal_id" is a bare string, present on any shape that allows it,
-naming which entry in this same turn's <goals> is the one actually
+naming which entry in this same turn's <goal_changes> is the one actually
 driving this action — omit it entirely when this action is a reaction
 with no specific goal behind it, rather than inventing one to fill the
 field.
 
   {"kind": "INVOKE", "artifact_id": "<id>", "operation_name": "<name>",
    "parameters": {<param name>: <value>, ...},
-   "goal_id": "<id of one of this turn's <goals> entries>"}
+   "goal_id": "<id of one of this turn's <goal_changes> entries>"}
 
   {"kind": "WAIT"}
 
@@ -511,13 +591,13 @@ Structure of your output, every turn:
 [delta-only update, per the rules above]
 </state_of_mind>
 
-<goals>
+<goal_changes>
 [every goal recognized or updated this turn, [] if none — see above]
-</goals>
+</goal_changes>
 
 <action>
 [exactly one JSON object, in one of the shapes above, referencing
-one of this turn's <goals> entries via goal_id if any drives it]
+one of this turn's <goal_changes> entries via goal_id if any drives it]
 </action>
 """;
 

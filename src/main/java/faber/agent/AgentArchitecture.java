@@ -133,8 +133,9 @@ public class AgentArchitecture {
 						+ "parsed and was entirely discarded — nothing from it was acted on or recorded, "
 						+ "so nothing is lost by trying again. The specific problem was: "
 						+ parseError.getMessage() + " Please produce a fresh, complete response in the "
-						+ "required <state_of_mind>/<goals>/<action> format, double-checking that every "
-						+ "JSON object and array you open is properly closed before you finish.]";
+						+ "required three-part format — your reasoning, then your goals list, then your "
+						+ "action — double-checking that every JSON object and array you open is properly "
+						+ "closed before you finish.]";
 			}
 		}
 
@@ -156,7 +157,11 @@ public class AgentArchitecture {
 			groundedSource.add(p.toContextLine());
 		WellFormedness.Result wf = WellFormedness.check(tuple, groundedSource, goalLedger);
 
-		String goalContent = tuple.isReactive() ? null : goalLedger.contentOf(tuple.G);
+		// C1's keyword-overlap check wants whichever of objective/plan the model actually supplied —
+		// an action's own justification typically cites specific plan detail (an operation, a date) at
+		// least as often as the more abstract objective, so both are combined rather than picking one.
+		String goalContent = tuple.isReactive() ? null : combineObjectiveAndPlan(
+				goalLedger.objectiveOf(tuple.G), goalLedger.planOf(tuple.G));
 		Coherence.Result coherence = Coherence.check(tuple, previousTuple, goalContent, false);
 
 		previousTuple = tuple;
@@ -193,7 +198,10 @@ public class AgentArchitecture {
 		return eventQueue.drainAll();
 	}
 
+	private final java.util.Map<String, MechanicalLog.PendingOp> thisCycleResolvedOps = new java.util.HashMap<>();
+
 	private String assembleContext(List<Percept> percepts) {
+		thisCycleResolvedOps.clear();
 		StringBuilder sb = new StringBuilder();
 		sb.append("[MECHANICAL LOG]\n").append(mechanicalLog.toContextBlock()).append("\n\n");
 		sb.append("[WORKSPACE]\n").append(this.getWorkspaceContextBlock()).append("\n");
@@ -206,7 +214,10 @@ public class AgentArchitecture {
 			for (Percept p : percepts) {
 				sb.append("- ").append(p.toContextLine()).append('\n');
 				if (p.type == Percept.Type.OPERATION_COMPLETED || p.type == Percept.Type.OPERATION_FAILED) {
-					mechanicalLog.resolve(p.correlationId);
+					MechanicalLog.PendingOp resolved = mechanicalLog.resolve(p.correlationId);
+					if (resolved != null) {
+						thisCycleResolvedOps.put(p.correlationId, resolved);
+					}
 				}
 			}
 		}
@@ -232,24 +243,30 @@ public class AgentArchitecture {
 		return sb.toString();
 	}
 	
-	public String dumpLastCyclePlanResultGoals() {
+	public String dumpLastCycleGoalChanges() {
 		StringBuilder sb = new StringBuilder();
 		var planRes = lastCycleResult.planResult();
-		// var actInfo = lastCycleResult.actResult();		
-		// sb.append("action's goal_id: " + planRes.actionGoalId);
-		sb.append("\nGoals identified in this cycle:\n");
-		for (var g: planRes.getGoals()) {
-			sb.append("- " + g.id);			
-			if (g.content != null) {
-				sb.append(" - content: " + g.content);
+		if (planRes.getGoals().size() > 0) {
+			for (var g: planRes.getGoals()) {
+				sb.append("- " + g.id);
+				sb.append(" - status: " + (g.status != null ? g.status.toJsonValue() : "(no update this turn)"));
+				if (g.objective != null) {
+					sb.append(" - objective: " + g.objective);
+				}
+				if (g.plan != null) {
+					sb.append(" - plan: " + g.plan);
+				}
+				if (g.trigger != null) {
+					sb.append(" - trigger: condition=" + g.trigger.condition
+							+ ", signal=" + g.trigger.signalArtifactId + "/" + g.trigger.signalName
+							+ ", operation_name=" + g.trigger.operationName
+							+ ", value_contains=" + g.trigger.signalValueContains
+							+ ", recurring=" + g.trigger.recurring);
+				}
+				sb.append("\n");
 			}
-			if (g.trigger != null) {
-				sb.append(" - trigger: condition=" + g.trigger.condition
-						+ ", signal=" + g.trigger.signalArtifactId + "/" + g.trigger.signalName
-						+ ", value_contains=" + g.trigger.signalValueContains
-						+ ", recurring=" + g.trigger.recurring);
-			}
-			sb.append("\n");
+		} else {
+			sb.append("(none)\n");
 		}
 		return sb.toString();
 	}
@@ -330,6 +347,19 @@ public class AgentArchitecture {
 	 * have a legitimate reason to defer or reconsider (Bratman: intentions are
 	 * revisable, just not silently so), and adjudicating that is left to a
 	 * human/audit process, not enforced online.
+	 *
+	 * "Addressed" also recognizes a second, independent path, found necessary
+	 * from a real run: this method runs before the same cycle's <goal_changes> array is
+	 * processed into the ledger (that happens later, in the extractor), so it
+	 * previously had no way to see that the model had already resolved the
+	 * trigger's goal via "status" in <goal_changes> this very cycle — even when the
+	 * action itself (e.g. a plain send_msg_to_user reporting the outcome) never
+	 * cited that goal_id. The goal got closed out correctly; only the audit was
+	 * blind to it, producing a false-positive warning for a genuinely-addressed
+	 * commitment. Checking result.getGoals() directly, before it's processed,
+	 * closes that gap without weakening the check for a genuinely-ignored
+	 * trigger — one with neither an action citation nor a status update has
+	 * addressed nothing, and still warns exactly as before.
 	 */
 	private void checkTriggerFidelity(List<Percept> percepts, PlanResult result) {
 		for (GoalLedger.PendingTrigger trigger : List.copyOf(goalLedger.pendingTriggers().values())) {
@@ -337,16 +367,36 @@ public class AgentArchitecture {
 			if (!satisfied)
 				continue;
 
-			boolean addressed = trigger.goalId.equals(result.getActInfo().goalId());
+			boolean addressedByAction = trigger.goalId.equals(result.getActInfo().goalId());
+			boolean addressedByResolution = resolvedInGoalsThisCycle(trigger.goalId, result.getGoals());
+			boolean addressed = addressedByAction || addressedByResolution;
 			if (addressed) {
 				goalLedger.resolveTrigger(trigger.goalId);
-				System.out.println("[TriggerFidelity] resolved: " + trigger.goalId
+				String via = addressedByAction ? "action cited it directly"
+						: "goal marked achieved/dropped this cycle, action did not cite it";
+				System.out.println("[TriggerFidelity] resolved: " + trigger.goalId + " (via: " + via + ")"
 						+ (trigger.recurring ? " (recurring — stays active)" : ""));
 			} else {
 				System.out.println("[TriggerFidelity][WARNING] condition satisfied for goal '" + trigger.goalId
 						+ "' this cycle, but action does not address it (planned: " + trigger.plannedAction + ")");
 			}
 		}
+	}
+
+	/** Joins whichever of objective/plan is present into one string for C1's keyword-overlap check. */
+	private static String combineObjectiveAndPlan(String objective, String plan) {
+		if (objective == null && plan == null) return null;
+		if (objective == null) return plan;
+		if (plan == null) return objective;
+		return objective + " " + plan;
+	}
+
+	/** True if this cycle's <goal_changes> array includes a status change (achieved/dropped) for this goal id. */
+	private static boolean resolvedInGoalsThisCycle(String goalId, List<PlanResult.GoalEntry> goals) {
+		for (PlanResult.GoalEntry g : goals) {
+			if (goalId.equals(g.id) && g.status != null) return true;
+		}
+		return false;
 	}
 
 	/**
@@ -362,16 +412,50 @@ public class AgentArchitecture {
 	 * check — for the genuinely value-conditional cases (e.g. "sender
 	 * is Marco specifically") — rather than being derived from the
 	 * whole condition sentence the way the retired heuristic was.
+	 *
+	 * A prerequisite bug found while adding signal_name_alternatives:
+	 * operation_started/completed/failed percepts carry neither
+	 * artifactId nor signalName/propName at all (confirmed directly
+	 * against Percept's own factory methods) — meaning no trigger keyed
+	 * to any of the three operation-lifecycle events could ever have
+	 * been mechanically matched here, independent of alternatives. Real
+	 * scenario logs showed operation-based triggers apparently
+	 * "working" only because the model always happened to also cite the
+	 * right goal id when addressing them — nothing was ever actually
+	 * auditing those specific cases; a warning would never have fired
+	 * either, regardless of whether the model got it right or wrong.
+	 * effectiveArtifactId/effectiveSignalName resolve what these
+	 * percepts implicitly refer to (via MechanicalLog, since
+	 * correlationId is all they carry) instead of reading fields that
+	 * were never populated for them in the first place.
+	 *
+	 * A second, related gap found afterward, in a real run: artifactId
+	 * and signal_name alone are still not enough to identify which
+	 * operation a trigger actually means, once an artifact can have
+	 * more than one kind of operation in flight. A trigger registered
+	 * for "the book_flight operation resolves" incorrectly fired when
+	 * a completely different operation on the same artifact — an
+	 * earlier list_available_dates call — happened to resolve first;
+	 * both produce an identical operation_completed percept from this
+	 * mechanism's point of view, since neither the percept nor the
+	 * bare artifactId says which operation it was. operationName
+	 * closes this the same way: resolved via the same MechanicalLog
+	 * lookup, checked only when the trigger actually specifies one, so
+	 * existing triggers with nothing to disambiguate keep working
+	 * exactly as before.
 	 */
-	private static boolean conditionSatisfied(GoalLedger.PendingTrigger trigger, List<Percept> percepts) {
+	private boolean conditionSatisfied(GoalLedger.PendingTrigger trigger, List<Percept> percepts) {
 		if (trigger.signalArtifactId == null || trigger.signalName == null) {
 			return false; // no structural spec given — cannot be mechanically checked; never silently guess
 		}
 		for (Percept p : percepts) {
-			if (!trigger.signalArtifactId.equals(p.artifactId)) continue;
+			if (!trigger.signalArtifactId.equals(effectiveArtifactId(p))) continue;
+			if (!trigger.matchesSignalName(effectiveSignalName(p))) continue;
 
-			boolean nameMatches = trigger.signalName.equals(p.signalName) || trigger.signalName.equals(p.propName);
-			if (!nameMatches) continue;
+			if (trigger.operationName != null) {
+				String opName = effectiveOperationName(p);
+				if (opName == null || !opName.equals(trigger.operationName)) continue;
+			}
 
 			if (trigger.signalValueContains != null) {
 				String line = p.toContextLine().toLowerCase();
@@ -380,6 +464,52 @@ public class AgentArchitecture {
 			return true;
 		}
 		return false;
+	}
+
+	/** operation_started/completed/failed carry no artifactId of their own — resolved via correlationId instead. */
+	private String effectiveArtifactId(Percept p) {
+		switch (p.type) {
+			case OPERATION_STARTED: {
+				MechanicalLog.PendingOp op = mechanicalLog.peek(p.correlationId);
+				return op != null ? op.artifactId : null;
+			}
+			case OPERATION_COMPLETED:
+			case OPERATION_FAILED: {
+				MechanicalLog.PendingOp op = thisCycleResolvedOps.get(p.correlationId);
+				return op != null ? op.artifactId : null;
+			}
+			default:
+				return p.artifactId;
+		}
+	}
+
+	/** Only meaningful for operation-lifecycle percepts — which specific operation this correlationId was. */
+	private String effectiveOperationName(Percept p) {
+		switch (p.type) {
+			case OPERATION_STARTED: {
+				MechanicalLog.PendingOp op = mechanicalLog.peek(p.correlationId);
+				return op != null ? op.operationName : null;
+			}
+			case OPERATION_COMPLETED:
+			case OPERATION_FAILED: {
+				MechanicalLog.PendingOp op = thisCycleResolvedOps.get(p.correlationId);
+				return op != null ? op.operationName : null;
+			}
+			default:
+				return null;
+		}
+	}
+
+	/** operation_started/completed/failed carry no signalName/propName — the percept's own type names it instead. */
+	private String effectiveSignalName(Percept p) {
+		switch (p.type) {
+			case OPERATION_STARTED: return "operation_started";
+			case OPERATION_COMPLETED: return "operation_completed";
+			case OPERATION_FAILED: return "operation_failed";
+			case ARTIFACT_SIGNAL: return p.signalName;
+			case ARTIFACT_OBS_PROP_UPDATED: return p.propName;
+			default: return null;
+		}
 	}
 
 	/**

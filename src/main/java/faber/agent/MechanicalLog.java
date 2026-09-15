@@ -36,6 +36,11 @@ public final class MechanicalLog {
         return pending.remove(correlationId);
     }
 
+    /** Read-only lookup — unlike resolve(), does not remove the record. For inspecting a still-pending op. */
+    public PendingOp peek(String correlationId) {
+        return pending.get(correlationId);
+    }
+
     /** Correlation ids of every pending op targeting a given artifact — used by DISPOSE_ARTIFACT's cascade. */
     public java.util.List<String> pendingOpsFor(String artifactId) {
         java.util.List<String> ids = new java.util.ArrayList<>();
