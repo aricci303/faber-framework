@@ -23,23 +23,39 @@ import faber.environment.Workspace;
 
 public class AgentArchitecture {
 
+	final static private long PERCEPT_TIMEOUT = 30_000;
+	
 	private Agent agent;
 
 	private EventQueue eventQueue;
 	private Workspace workspace;
 
 	private MechanicalLog mechanicalLog;
+	private final java.util.Map<String, MechanicalLog.PendingOp> thisCycleResolvedOps = new java.util.HashMap<>();
+
 	private StateOfMind stateOfMind;
 	private GoalLedger goalLedger;
+	private IntentionLedger intentionLedger;
+
+	private List<Percept> currentPercepts;	
+	private PlanResult currentPlanResult;
+	private ActResult currentActResult;
+	
+	private WellFormedness.Result currentWF;
+    private CoreTuple currentCoreTuple;
+    private Coherence.Result currentCoherence;
+	private CoreTuple previousTuple;
+    
+	/* LLM related */
+	private String currentContext;
+	private LlmCallResult currentLLMCallResult;
 
 	private TupleExtractor extractor;
 	private StageProfile stageProfile;
 	private List<CoreTuple> tupleTrace;
 	private AtomicInteger correlationCounter;
-	private CoreTuple previousTuple;
 
 	private long nextCycleToRun;	
-	private CycleResult lastCycleResult;
 	
 	private LlmClient llm;
 
@@ -79,14 +95,13 @@ public class AgentArchitecture {
 
 		stateOfMind = new StateOfMind();
 		goalLedger = new GoalLedger();
+		intentionLedger = new IntentionLedger();
 
 		tupleTrace = new ArrayList<>();
 		correlationCounter = new AtomicInteger(0);
 
 		previousTuple = null;
 		nextCycleToRun = 1;
-
-		lastCycleResult = new CycleResult(0, new ArrayList<Percept>(), this.getFullStateOfMind(), null, new ActResult("",false), null, null, null, null );	
 	}
 
 	public void notifyFailureForDisposedArtifactPendingOps(String artifactId) {
@@ -96,187 +111,80 @@ public class AgentArchitecture {
 		}
 	}
 
-	public CycleResult runOneCycle() throws Exception {
-		var percepts = sense();
-		String context = assembleContext(percepts);
+	
+	public void runOneCycle() throws Exception {
+		sense();		
+		plan();		
+		act();
+		doChecks();		
+		nextCycleToRun++;
+	}
 
+	private void sense() throws InterruptedException {		
+		if (currentActResult != null && currentActResult.committedToWait()) {
+			currentPercepts = eventQueue.awaitAtLeastOne(PERCEPT_TIMEOUT);
+		} else {
+			currentPercepts = eventQueue.drainAll();
+		}
+		currentContext = assembleContext(currentPercepts);
+	}
+
+	private void plan() {
 		// Retries the LLM call itself, not the whole cycle — percepts are captured once, above, and
 		// never re-sensed, since a failed parse must not cost the agent the very percepts that
 		// triggered this cycle. Only the call+parse step retries; each attempt's tokens are summed
 		// honestly into the final reported total, since real cost was spent on every attempt, not
 		// just the one that happened to succeed.
 		final int maxAttempts = 3;
-		String attemptContext = context;
+		String attemptContext = currentContext;
 		LlmClient.LlmCallResult lastCallResult = null;
-		PlanResult planResult = null;
+		currentPlanResult = null;
 		long sumInputNonCached = 0, sumCacheCreation = 0, sumCacheRead = 0, sumOutput = 0;
 
-		for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-			lastCallResult = llm.plan(SystemPrompt.systemPrompt, attemptContext);
-			sumInputNonCached += lastCallResult.numInputTokens();
-			sumCacheCreation += lastCallResult.cacheCreationInputTokens();
-			sumCacheRead += lastCallResult.cacheReadInputTokens();
-			sumOutput += lastCallResult.numOutputTokens();
-
-			try {
-				planResult = PlanResult.parse(lastCallResult.output());
-				break;
-			} catch (IllegalStateException parseError) {
-				if (attempt == maxAttempts) {
-					throw new IllegalStateException("Model output remained malformed after " + maxAttempts
-							+ " attempts — giving up rather than retry indefinitely. Last parse error: "
-							+ parseError.getMessage(), parseError);
-				}
-				System.out.println("[RETRY] cycle " + nextCycleToRun + ", attempt " + attempt
-						+ " produced malformed output (" + parseError.getMessage() + "). Retrying with feedback.");
-				attemptContext = context + "\n\n[NOTE: your previous response for this turn could not be "
-						+ "parsed and was entirely discarded — nothing from it was acted on or recorded, "
-						+ "so nothing is lost by trying again. The specific problem was: "
-						+ parseError.getMessage() + " Please produce a fresh, complete response in the "
-						+ "required three-part format — your reasoning, then your goals list, then your "
-						+ "action — double-checking that every JSON object and array you open is properly "
-						+ "closed before you finish.]";
-			}
-		}
-
-		var llmCallResult = new LlmClient.LlmCallResult(
-				lastCallResult.output(), sumInputNonCached, sumOutput, sumCacheCreation, sumCacheRead);
-		stateOfMind.update(planResult.getStateOfMind());
-
-		var actResult = act(planResult.getActInfo());
-		checkTriggerFidelity(percepts, planResult);
-
-		CoreTuple tuple = extractor.extract(percepts, planResult, goalLedger);
-		if (!stageProfile.relationAllowed(tuple.r)) {
-			throw new IllegalStateException("Relation " + tuple.r + " used but its layer isn't active "
-					+ "in this StageProfile — a layer leaking in without being declared.");
-		}
-
-		Set<String> groundedSource = new LinkedHashSet<>();
-		for (Percept p : percepts)
-			groundedSource.add(p.toContextLine());
-		WellFormedness.Result wf = WellFormedness.check(tuple, groundedSource, goalLedger);
-
-		// C1's keyword-overlap check wants whichever of goal description/plan the model actually
-		// supplied — an action's own justification typically cites specific plan detail (an
-		// operation, a date) at least as often as the more abstract goal, so both are combined
-		// rather than picking one.
-		String goalContent = tuple.isReactive() ? null : combineGoalDescriptionAndPlan(
-				goalLedger.goalDescriptionOf(tuple.G), goalLedger.planOf(tuple.G));
-		Coherence.Result coherence = Coherence.check(tuple, previousTuple, goalContent, false);
-
-		previousTuple = tuple;
-		tupleTrace.add(tuple);
-		
-		lastCycleResult = new CycleResult(nextCycleToRun, percepts, this.getFullStateOfMind(), planResult, actResult,  tuple, wf, coherence, llmCallResult);	
-		nextCycleToRun++;
-		return lastCycleResult;
-	}
-
-	public CycleResult getLastCycleResult() {
-		return lastCycleResult;
-	}
-
-	private String getFullStateOfMind() {
-		StringBuffer sb = new StringBuffer("");
-		sb.append("[PENDING INTENTIONS]\n").append(goalLedger.toContextBlock()).append("\n");
-		sb.append("[STATE OF MIND]\n").append(stateOfMind.current()).append("\n");
-		return sb.toString();
-	}
-
-	public long getNextCycleToRun() {
-		return nextCycleToRun;
-	}
-
-	public List<CoreTuple> trace() {
-		return tupleTrace;
-	}
-
-	private List<Percept> sense() throws InterruptedException {
-		if (lastCycleResult.actResult().committedToWait()) {
-			return eventQueue.awaitAtLeastOne(30_000);
-		}
-		return eventQueue.drainAll();
-	}
-
-	private final java.util.Map<String, MechanicalLog.PendingOp> thisCycleResolvedOps = new java.util.HashMap<>();
-
-	private String assembleContext(List<Percept> percepts) {
-		thisCycleResolvedOps.clear();
-		StringBuilder sb = new StringBuilder();
-		sb.append("[MECHANICAL LOG]\n").append(mechanicalLog.toContextBlock()).append("\n\n");
-		sb.append("[WORKSPACE]\n").append(this.getWorkspaceContextBlock()).append("\n");
-		sb.append("[PENDING INTENTIONS]\n").append(goalLedger.toContextBlock()).append("\n\n");
-		sb.append("[STATE OF MIND]\n").append(stateOfMind.current()).append("\n\n");
-		sb.append("[NEW PERCEPTS]\n");
-		if (percepts.isEmpty()) {
-			sb.append("(none)\n");
-		} else {
-			for (Percept p : percepts) {
-				sb.append("- ").append(p.toContextLine()).append('\n');
-				if (p.type == Percept.Type.OPERATION_COMPLETED || p.type == Percept.Type.OPERATION_FAILED) {
-					MechanicalLog.PendingOp resolved = mechanicalLog.resolve(p.correlationId);
-					if (resolved != null) {
-						thisCycleResolvedOps.put(p.correlationId, resolved);
+		try {
+			for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+				
+				lastCallResult = llm.plan(SystemPrompt.systemPrompt, attemptContext);
+				
+				sumInputNonCached += lastCallResult.numInputTokens();
+				sumCacheCreation += lastCallResult.cacheCreationInputTokens();
+				sumCacheRead += lastCallResult.cacheReadInputTokens();
+				sumOutput += lastCallResult.numOutputTokens();
+	
+				try {
+					currentPlanResult = PlanResult.parse(lastCallResult.output());
+					break;
+				} catch (IllegalStateException parseError) {
+					if (attempt == maxAttempts) {
+						throw new IllegalStateException("Model output remained malformed after " + maxAttempts
+								+ " attempts — giving up rather than retry indefinitely. Last parse error: "
+								+ parseError.getMessage(), parseError);
 					}
+					System.out.println("[RETRY] cycle " + nextCycleToRun + ", attempt " + attempt
+							+ " produced malformed output (" + parseError.getMessage() + "). Retrying with feedback.");
+					attemptContext = currentContext + "\n\n[NOTE: your previous response for this turn could not be "
+							+ "parsed and was entirely discarded — nothing from it was acted on or recorded, "
+							+ "so nothing is lost by trying again. The specific problem was: "
+							+ parseError.getMessage() + " Please produce a fresh, complete response in the "
+							+ "required three-part format — your reasoning, then your goals list, then your "
+							+ "action — double-checking that every JSON object and array you open is properly "
+							+ "closed before you finish.]";
 				}
 			}
+		} catch (Exception ex) {
+			throw new IllegalStateException("Model cannot be accessed " + ex.getMessage());
 		}
-		return sb.toString();
-	}
 
-	public String dumpLightContext() {
-		StringBuilder sb = new StringBuilder();
-		sb.append("[MECHANICAL LOG]\n").append(mechanicalLog.toContextBlock()).append("\n");
-		sb.append("[WORKSPACE]\n").append(this.dumpLightWorkspaceContextBlock());
-		sb.append("[NEW PERCEPTS]\n");
-		var percepts = lastCycleResult.senseResult();
-		if (percepts.isEmpty()) {
-			sb.append("(none)\n");
-		} else {
-			for (Percept p : percepts) {
-				sb.append("- ").append(p.toContextLine()).append('\n');
-				if (p.type == Percept.Type.OPERATION_COMPLETED || p.type == Percept.Type.OPERATION_FAILED) {
-					mechanicalLog.resolve(p.correlationId);
-				}
-			}
-		}
-		return sb.toString();
+		currentLLMCallResult = new LlmClient.LlmCallResult(
+				lastCallResult.output(), sumInputNonCached, sumOutput, sumCacheCreation, sumCacheRead);
+		stateOfMind.update(currentPlanResult.getStateOfMind());
+		
 	}
-	
-	public String dumpLastCycleIntentionChanges() {
-		StringBuilder sb = new StringBuilder();
-		var planRes = lastCycleResult.planResult();
-		if (planRes.getIntentionChanges().size() > 0) {
-			for (var g: planRes.getIntentionChanges()) {
-				sb.append("- goal id: " + g.goalId);
-				if (g.status != null) {
-					sb.append("\n - status: " + g.status.toJsonValue());
-				}
-				if (g.goalDescription != null) {
-					sb.append("\n - goal_description: " + g.goalDescription);
-				}
-				if (g.plan != null) {
-					sb.append("\n - plan: " + g.plan);
-				}
-				if (g.trigger != null) {
-					sb.append("\n - trigger: condition=" + g.trigger.condition
-							+ ", signal=" + g.trigger.signalArtifactId + "/" + g.trigger.signalName
-							+ ", operation_name=" + g.trigger.operationName
-							+ ", value_contains=" + g.trigger.signalValueContains
-							+ ", recurring=" + g.trigger.recurring);
-				}
-				sb.append("\n");
-			}
-		} else {
-			sb.append("(none)\n");
-		}
-		return sb.toString();
-	}
-	
-	private ActResult act(ActionInfo actTodo) {
+		
+	private void act() {
 		boolean committedToWait = false;
 		String act = ""; 
+		var actTodo = currentPlanResult.getActInfo();
 		JSONObject content = actTodo.content();
 		
 		switch (actTodo.kind()) {
@@ -333,14 +241,19 @@ public class AgentArchitecture {
 			break;
 		}
 		}
-		return new ActResult(act, committedToWait);
-		
+		currentActResult = new ActResult(act, committedToWait);	
 	}
-
-	private String newCorrelationId() {
-		return "op_" + correlationCounter.incrementAndGet();
+	
+	
+	private void doChecks() {
+		currentCoreTuple = extractor.extract(currentPercepts, currentPlanResult, goalLedger, intentionLedger);
+		checkTriggerFidelity();
+		checkWellformedness();
+		checkCoherence();		
 	}
-
+	
+	
+	
 	/**
 	 * Audit-only, not a hard gate — mirrors C2's status. For each pending trigger,
 	 * checks whether this cycle's percepts satisfy its condition (crude keyword
@@ -364,17 +277,17 @@ public class AgentArchitecture {
 	 * trigger — one with neither an action citation nor a status update has
 	 * addressed nothing, and still warns exactly as before.
 	 */
-	private void checkTriggerFidelity(List<Percept> percepts, PlanResult result) {
-		for (GoalLedger.PendingTrigger trigger : List.copyOf(goalLedger.pendingTriggers().values())) {
-			boolean satisfied = conditionSatisfied(trigger, percepts);
+	private void checkTriggerFidelity() {
+		for (Intention.PendingTrigger trigger : List.copyOf(intentionLedger.pendingTriggers().values())) {
+			boolean satisfied = conditionSatisfied(trigger, currentPercepts);
 			if (!satisfied)
 				continue;
 
-			boolean addressedByAction = trigger.goalId.equals(result.getActInfo().goalId());
-			boolean addressedByResolution = resolvedInIntentionChangesThisCycle(trigger.goalId, result.getIntentionChanges());
+			boolean addressedByAction = trigger.goalId.equals(currentPlanResult.getActInfo().goalId());
+			boolean addressedByResolution = resolvedInIntentionChangesThisCycle(trigger.goalId, currentPlanResult.getIntentionChanges());
 			boolean addressed = addressedByAction || addressedByResolution;
 			if (addressed) {
-				goalLedger.resolveTrigger(trigger.goalId);
+				intentionLedger.resolveTrigger(trigger.goalId);
 				String via = addressedByAction ? "action cited it directly"
 						: "goal marked achieved/dropped this cycle, action did not cite it";
 				System.out.println("[TriggerFidelity] resolved: " + trigger.goalId + " (via: " + via + ")"
@@ -385,6 +298,163 @@ public class AgentArchitecture {
 			}
 		}
 	}
+	
+	
+	private void checkWellformedness() {
+		if (!stageProfile.relationAllowed(currentCoreTuple.r)) {
+			throw new IllegalStateException("Relation " + currentCoreTuple.r + " used but its layer isn't active "
+					+ "in this StageProfile — a layer leaking in without being declared.");
+		}
+		Set<String> groundedSource = new LinkedHashSet<>();
+		for (Percept p : currentPercepts)
+			groundedSource.add(p.toContextLine());
+		currentWF = WellFormedness.check(currentCoreTuple, groundedSource, goalLedger);
+	}
+	
+	private void checkCoherence() {
+		// C1's keyword-overlap check wants whichever of goal description/plan the model actually
+		// supplied — an action's own justification typically cites specific plan detail (an
+		// operation, a date) at least as often as the more abstract goal, so both are combined
+		// rather than picking one.
+		String goalContent = currentCoreTuple.isReactive() ? null : combineGoalDescriptionAndPlan(
+				goalLedger.descriptionOf(currentCoreTuple.G), intentionLedger.planOf(currentCoreTuple.G));
+		currentCoherence = Coherence.check(currentCoreTuple, previousTuple, goalContent, false);
+		previousTuple = currentCoreTuple;
+		tupleTrace.add(currentCoreTuple);		
+	}
+	
+
+	
+	public CycleResult getLastCycleResult() {
+		return new CycleResult(nextCycleToRun, currentPercepts, this.getFullStateOfMind(), currentPlanResult, currentActResult,  currentCoreTuple, currentWF, currentCoherence, currentLLMCallResult);
+	}
+
+	/**
+	 * Renders every currently active intention — not only ones with an
+	 * attached trigger — harness-authored context, never compressed.
+	 * Deliberately lives here rather than on either ledger: it needs
+	 * both a goal's description (GoalLedger) and its intention's plan
+	 * and trigger (IntentionLedger) together, and neither ledger has a
+	 * reference to the other by design (see IntentionLedger's own class
+	 * doc). A goal's description and its intention's plan are each
+	 * shown unconditionally when present; a trigger, if one exists, is
+	 * shown alongside via its free-text condition and planned action —
+	 * the structural matching fields are for the harness's own
+	 * mechanical check, not something the agent needs read back to it.
+	 */
+	private String ongoingIntentionsBlock() {
+		StringBuilder sb = new StringBuilder();
+		for (Intention i : intentionLedger.activeIntentions()) {
+			sb.append("- goal: ").append(i.goalId);
+			String description = goalLedger.descriptionOf(i.goalId);
+			if (description != null) sb.append("\n - goal_description: ").append(description);
+			if (i.plan != null) sb.append("\n - plan: ").append(i.plan);
+
+			if (i.trigger != null) {
+				sb.append("\n - condition: ").append(i.trigger.condition)
+				  .append("\n - planned_action: ").append(i.trigger.plannedAction);
+				if (i.trigger.recurring) {
+					sb.append("\n (recurring — stays active after firing)");
+				}
+			}
+			sb.append('\n');
+		}
+		return sb.length() == 0 ? "(none)" : sb.toString().stripTrailing();
+	}
+
+	private String getFullStateOfMind() {
+		StringBuffer sb = new StringBuffer("");
+		sb.append("[ONGOING INTENTIONS]\n").append(ongoingIntentionsBlock()).append("\n");
+		sb.append("[STATE OF MIND]\n").append(stateOfMind.current()).append("\n");
+		return sb.toString();
+	}
+
+	public long getNextCycleToRun() {
+		return nextCycleToRun;
+	}
+
+	public List<CoreTuple> trace() {
+		return tupleTrace;
+	}
+
+
+	private String assembleContext(List<Percept> percepts) {
+		thisCycleResolvedOps.clear();
+		StringBuilder sb = new StringBuilder();
+		sb.append("[MECHANICAL LOG]\n").append(mechanicalLog.toContextBlock()).append("\n\n");
+		sb.append("[WORKSPACE]\n").append(this.getWorkspaceContextBlock()).append("\n");
+		sb.append("[ONGOING INTENTIONS]\n").append(ongoingIntentionsBlock()).append("\n\n");
+		sb.append("[STATE OF MIND]\n").append(stateOfMind.current()).append("\n\n");
+		sb.append("[NEW PERCEPTS]\n");
+		if (percepts.isEmpty()) {
+			sb.append("(none)\n");
+		} else {
+			for (Percept p : percepts) {
+				sb.append("- ").append(p.toContextLine()).append('\n');
+				if (p.type == Percept.Type.OPERATION_COMPLETED || p.type == Percept.Type.OPERATION_FAILED) {
+					MechanicalLog.PendingOp resolved = mechanicalLog.resolve(p.correlationId);
+					if (resolved != null) {
+						thisCycleResolvedOps.put(p.correlationId, resolved);
+					}
+				}
+			}
+		}
+		return sb.toString();
+	}
+
+	public String dumpLightContext() {
+		StringBuilder sb = new StringBuilder();
+		sb.append("[MECHANICAL LOG]\n").append(mechanicalLog.toContextBlock()).append("\n");
+		sb.append("[WORKSPACE]\n").append(this.dumpLightWorkspaceContextBlock());
+		sb.append("[NEW PERCEPTS]\n");
+		if (currentPercepts.isEmpty()) {
+			sb.append("(none)\n");
+		} else {
+			for (Percept p : currentPercepts) {
+				sb.append("- ").append(p.toContextLine()).append('\n');
+				if (p.type == Percept.Type.OPERATION_COMPLETED || p.type == Percept.Type.OPERATION_FAILED) {
+					mechanicalLog.resolve(p.correlationId);
+				}
+			}
+		}
+		return sb.toString();
+	}
+	
+	public String dumpLastCycleIntentionChanges() {
+		StringBuilder sb = new StringBuilder();
+		if (currentPlanResult.getIntentionChanges().size() > 0) {
+			for (var g: currentPlanResult.getIntentionChanges()) {
+				sb.append("- goal id: " + g.goalId);
+				if (g.status != null) {
+					sb.append("\n - status: " + g.status.toJsonValue());
+				}
+				if (g.goalDescription != null) {
+					sb.append("\n - goal_description: " + g.goalDescription);
+				}
+				if (g.plan != null) {
+					sb.append("\n - plan: " + g.plan);
+				}
+				if (g.trigger != null) {
+					sb.append("\n - trigger: condition=" + g.trigger.condition
+							+ ", signal=" + g.trigger.signalArtifactId + "/" + g.trigger.signalName
+							+ ", operation_name=" + g.trigger.operationName
+							+ ", value_contains=" + g.trigger.signalValueContains
+							+ ", recurring=" + g.trigger.recurring);
+				}
+				sb.append("\n");
+			}
+		} else {
+			sb.append("(none)\n");
+		}
+		return sb.toString();
+	}
+	
+
+
+	private String newCorrelationId() {
+		return "op_" + correlationCounter.incrementAndGet();
+	}
+
 
 	/** Joins whichever of goal description/plan is present into one string for C1's keyword-overlap check. */
 	private static String combineGoalDescriptionAndPlan(String goalDescription, String plan) {
@@ -446,25 +516,22 @@ public class AgentArchitecture {
 	 * lookup, checked only when the trigger actually specifies one, so
 	 * existing triggers with nothing to disambiguate keep working
 	 * exactly as before.
+	 * Resolving a percept's effective artifact id, signal name, and
+	 * operation name (below) still lives here, since that resolution
+	 * needs MechanicalLog — something a trigger has no business
+	 * depending on. Once those facts are resolved, the actual
+	 * structural comparison against the trigger's own fields is the
+	 * trigger's own responsibility (Intention.PendingTrigger.matches),
+	 * not duplicated here.
 	 */
-	private boolean conditionSatisfied(GoalLedger.PendingTrigger trigger, List<Percept> percepts) {
+	private boolean conditionSatisfied(Intention.PendingTrigger trigger, List<Percept> percepts) {
 		if (trigger.signalArtifactId == null || trigger.signalName == null) {
 			return false; // no structural spec given — cannot be mechanically checked; never silently guess
 		}
 		for (Percept p : percepts) {
-			if (!trigger.signalArtifactId.equals(effectiveArtifactId(p))) continue;
-			if (!trigger.matchesSignalName(effectiveSignalName(p))) continue;
-
-			if (trigger.operationName != null) {
-				String opName = effectiveOperationName(p);
-				if (opName == null || !opName.equals(trigger.operationName)) continue;
+			if (trigger.matches(effectiveArtifactId(p), effectiveSignalName(p), effectiveOperationName(p), p.toContextLine())) {
+				return true;
 			}
-
-			if (trigger.signalValueContains != null) {
-				String line = p.toContextLine().toLowerCase();
-				if (!line.contains(trigger.signalValueContains.toLowerCase())) continue;
-			}
-			return true;
 		}
 		return false;
 	}

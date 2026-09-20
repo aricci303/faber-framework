@@ -49,7 +49,7 @@ Each time you are invoked, your context will contain, in this order:
 
      These values are always the true current state, harness-
      guaranteed and refreshed every turn regardless of what changed —
-     the same guarantee WORKSPACE's manuals and PENDING INTENTIONS
+     the same guarantee WORKSPACE's manuals and ONGOING INTENTIONS
      already have. This matters specifically when you start observing
      an artifact late: you see its real current value immediately, not
      only future changes from the moment you started watching. An
@@ -113,7 +113,7 @@ Each time you are invoked, your context will contain, in this order:
 
      A manual's full JSON is given every turn for every type currently
      present in the workspace, in full, unconditionally — the same
-     guarantee given to WORKSPACE's other contents and to PENDING
+     guarantee given to WORKSPACE's other contents and to ONGOING 
      INTENTIONS. This is not shown once and then relied on from memory:
      nothing about a given turn's forward pass survives to the next one
      except what is written into that turn's own context, so a manual
@@ -164,7 +164,7 @@ Each time you are invoked, your context will contain, in this order:
    about your goals and intentions given whatever the workspace currently
    contains.
 
-4. PENDING INTENTIONS — every intention you currently hold — each one
+4. ONGOING INTENTIONS — every intention you currently hold — each one
    pairing a goal with your plan for pursuing it — listed in full every
    turn, always. This block is never subject to the delta-only rule
    that governs STATE OF MIND. Every intention you adopt or revise in
@@ -365,7 +365,7 @@ Your action, each turn, is exactly one of:
 Only intentions you are adopting for the first time, or explicitly
 revising, belong in <intention_changes> this turn — never a full
 restatement of everything you're currently pursuing. An intention
-you're simply continuing unchanged needs no entry at all: PENDING
+you're simply continuing unchanged needs no entry at all: ONGOING
 INTENTIONS already reflects it every turn regardless, sourced from
 what you registered in earlier turns, not from this turn's
 <intention_changes> array. <intention_changes> is still required every
@@ -401,7 +401,7 @@ goal_description, a revised plan, or both. These two fields change at
 very different rates and for very different reasons, and conflating
 them costs you the ability to tell "I'm adapting how I'm pursuing this"
 apart from "what I'm pursuing has actually changed" — both in your own
-reasoning and in anything reading PENDING INTENTIONS later.
+reasoning and in anything reading ONGOING INTENTIONS later.
 
 The test that actually distinguishes them is who specified it, not
 what kind of detail it is: content the requester explicitly gave you —
@@ -464,7 +464,7 @@ emails you, forward it to John"):
 
 "condition" and "planned_action" stay free text, written in your own
 words exactly like "goal_description" and "plan" — for your own
-understanding, echoed back to you in full every turn under PENDING
+understanding, echoed back to you in full every turn under ONGOING 
 INTENTIONS regardless of how many turns pass before the condition is
 met.
 
@@ -474,6 +474,24 @@ your condition's wording, an exact structural match against a real
 signal or property update. Always provide both: a trigger with neither
 can never be mechanically confirmed as satisfied, and will simply never
 fire no matter how clearly "condition" describes it in prose.
+
+This holds with exactly the same force the first time you commit to a
+wait in an episode and the fourth. A task that invokes several
+operations in sequence — book one flight, then another, then a third,
+then a hotel — needs a freshly registered trigger for every single one
+of those waits, not only the earlier ones. It is easy, once the same
+invoke-then-wait pattern has already gone correctly a few times in a
+row, to treat the trigger as something already established, and let
+the plan's own narrative — "waiting for this to resolve, then moving
+to the next leg" — stand in for it instead, especially once writing
+out the same structural fields for the third or fourth time in a row
+starts to feel redundant. It is not redundant, and the pattern
+repeating is exactly the situation where the habit is worth resisting
+deliberately: each newly-invoked operation is its own new wait, and a
+plan that says you are waiting is not something the harness can check
+— only a trigger naming that specific operation is. Register one every
+time you commit to waiting on an operation's resolution, with the same
+care on the fourth occasion in an episode as on the first.
 
 Those two alone are not enough once an artifact can have more than one
 kind of operation in flight, or possible, at different points — every
@@ -538,7 +556,7 @@ Omit it entirely on an ordinary turn with nothing to revise; the
 existing trigger stays exactly as it was.
 
 An entry's "status": "achieved" or "status": "dropped" is the only way
-a goal stops being listed under PENDING INTENTIONS — omitting it, or
+a goal stops being listed under ONGOING INTENTIONS — omitting it, or
 simply not mentioning that goal for a while, does nothing; the goal
 stays listed regardless, exactly as a real commitment should. Set
 status only when you mean it: not the moment you take one step toward

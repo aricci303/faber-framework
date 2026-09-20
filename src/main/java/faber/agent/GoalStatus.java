@@ -16,7 +16,7 @@ package faber.agent;
  *     legitimately written by the model — there is no well-formed way
  *     to *say* "still ongoing" each cycle, and requiring the model to
  *     restate it as a JSON field would trade real, recurring output
- *     cost for information PENDING INTENTIONS already reliably shows.
+ *     cost for information ONGOING INTENTIONS already reliably shows.
  *     A null IntentionEntry.status therefore means "no status update this
  *     turn," which is a genuinely different thing from ONGOING itself
  *     — the latter is a persistent ledger fact, not a per-turn claim.

@@ -17,19 +17,24 @@ public final class EventQueue {
 
     public void publish(Percept percept) {
         queue.offer(percept);
+        // System.out.println("NEW PERCEPT IN QUEUE: " + percept + " - " + queue.size());
     }
 
     public List<Percept> drainAll() {
         List<Percept> drained = new ArrayList<>();
+        // System.out.println("DRAINING QUEUE: " + queue.size());
         queue.drainTo(drained);
+        // System.out.println("PERCEPTS DRAINED: " + drained.size());
         return drained;
     }
 
     public List<Percept> awaitAtLeastOne(long timeoutMillis) throws InterruptedException {
-        Percept first = queue.poll(timeoutMillis, TimeUnit.MILLISECONDS);
+        // System.out.println("AWAIT-POLLING QUEUE: " + queue.size());
+    	Percept first = queue.poll(timeoutMillis, TimeUnit.MILLISECONDS);
         List<Percept> drained = new ArrayList<>();
         if (first != null) drained.add(first);
         queue.drainTo(drained);
+        // System.out.println("AWAIT-PERCEPTS DRAINED: " + drained.size());
         return drained;
     }
 

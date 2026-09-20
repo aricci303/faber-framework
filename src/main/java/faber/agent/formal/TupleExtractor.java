@@ -7,6 +7,7 @@ import java.util.Set;
 import faber.agent.Percept;
 import faber.agent.PlanResult;
 import faber.agent.GoalLedger;
+import faber.agent.IntentionLedger;
 
 /**
  * Computes alpha: narrative/action -> formal tuple, externally and
@@ -14,7 +15,7 @@ import faber.agent.GoalLedger;
  */
 public interface TupleExtractor {
 
-    CoreTuple extract(List<Percept> perceptsThisCycle, PlanResult action, GoalLedger ledger);
+    CoreTuple extract(List<Percept> perceptsThisCycle, PlanResult action, GoalLedger goalLedger, IntentionLedger intentionLedger);
 
     /**
      * A deliberately simple, deterministic extractor operating purely on
@@ -27,21 +28,23 @@ public interface TupleExtractor {
      */
     final class HeuristicTupleExtractor implements TupleExtractor {
         @Override
-        public CoreTuple extract(List<Percept> perceptsThisCycle, PlanResult planResult, GoalLedger ledger) {
+        public CoreTuple extract(List<Percept> perceptsThisCycle, PlanResult planResult,
+                                  GoalLedger goalLedger, IntentionLedger intentionLedger) {
             Set<String> W = new LinkedHashSet<>();
             for (Percept p : perceptsThisCycle) {
             	W.add(p.toContextLine());
             }
 
-            // Every intention in <intention_changes> is registered/updated identically, whether or not
+            // Every intention in <intention_changes> is adopted/revised identically, whether or not
             // it's the one driving this cycle's action — first-class, not an attachment to whichever
-            // action happens to be taken this cycle. registerOrUpdate handles both first introduction
-            // and later revision; omitting a field on a later entry leaves the existing value untouched.
+            // action happens to be taken this cycle. Goal and intention are kept in step here, by this
+            // caller, from the same entry — neither ledger knows about the other on its own.
             for (PlanResult.IntentionEntry g : planResult.getIntentionChanges()) {
                 if (g.goalId == null) continue;
-                ledger.registerOrUpdate(g.goalId, g.goalDescription, g.plan);
-                ledger.registerTrigger(g.goalId, g.trigger);
-                ledger.resolveGoal(g.goalId, g.status);
+                goalLedger.registerOrUpdate(g.goalId, g.goalDescription);
+                intentionLedger.registerOrUpdate(g.goalId, g.plan);
+                intentionLedger.registerTrigger(g.goalId, g.trigger);
+                intentionLedger.resolveGoal(g.goalId, g.status);
             }
 
             var goalId = planResult.getActInfo().goalId();

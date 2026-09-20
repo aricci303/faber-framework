@@ -51,7 +51,7 @@ public final class Scenario05Main {
 
         Thread scenarioDriver = new Thread(() -> {
             try {
-                Thread.sleep(100);
+                Thread.sleep(2000);
                 userConsole.simulateIncomingMessage(
                         "Please book a flight from Bologna to Berlin for December 24th, 2026. Once the "
                         + "flight is confirmed, book a hotel in Berlin for the same dates (check-in "

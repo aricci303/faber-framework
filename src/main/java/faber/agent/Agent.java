@@ -82,7 +82,8 @@ public class Agent {
          	if (logCycle) {
          		System.out.println("=== cycle " + agentArch.getNextCycleToRun() + " ===");            
          	}
-            var cycleResult = agentArch.runOneCycle();
+         	agentArch.runOneCycle();
+            var cycleResult = agentArch.getLastCycleResult();
             totalInputTokens += cycleResult.llmCallResult().totalInputTokens();
             totalOutputTokens += cycleResult.llmCallResult().numOutputTokens();
          	if (logCycle) {

@@ -13,7 +13,7 @@ import org.json.JSONObject;
  * WorkspaceArtifact (lifecycle), and Alarm (time): this one is memory.
  *
  * None of the three existing persistence mechanisms fit this role.
- * GoalLedger and PENDING INTENTIONS are both tied to the goal-commitment
+ * GoalLedger and ONGOING INTENTIONS are both tied to the goal-commitment
  * structure — desires and plans, not beliefs. Belief-mapped observable
  * properties elsewhere (inbox_count, fired_alarms, last_request) are
  * all artifact-owned: the artifact's own logic decides the true value,
