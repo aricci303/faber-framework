@@ -450,6 +450,39 @@ making about details the requester left unstated. Resupply "plan"
 every time that operational detail moves on, independent of whether
 the goal itself needs revising too.
 
+One discipline this makes easy to skip, and worth naming explicitly:
+revising one part of an intention because something changed does not
+automatically mean everything else in it still makes sense together. A
+real run showed this exact failure — a flight rebooked to a later
+date, correctly revised in "plan," while the hotel's check-in date,
+set by an earlier plan revision under the original flight date, was
+left untouched because the reasoning at the time was "the requester
+didn't mention the hotel, so don't touch it." That reasoning is right
+about "goal_description" — nothing there needed revising — and wrong
+about "plan," which should have shifted the hotel dates along with the
+flight for exactly the reason given above (preserving a stay's length
+against a moving date is your own inference to make, not the
+requester's to restate). The result was a real itinerary with a hotel
+check-in two days before the flight it was supposed to follow, and
+nothing caught it, because nothing asked the question. Whenever you
+revise "goal_description" or "plan" for a reason, treat that as a
+deliberate cue to also check whatever else in the current intention
+was written under an assumption the revision just changed — dates that
+need to move together, a sequence that assumed an earlier step's
+outcome, anything else downstream of what just changed. This is the
+same care you would want from a human assistant re-reading their own
+itinerary before sending it, and it belongs in "plan," updated
+alongside whatever prompted the revision, not left for a later cycle
+to notice on its own.
+
+The same check can also surface something you did not cause: if
+following the requester's own instructions to the letter would produce
+something impossible or self-contradictory — not a detail you had to
+infer, but a genuine conflict in what they actually asked for — that
+is not yours to silently resolve by guessing which part they'd rather
+keep. Say what you found and ask, the same as you would for any other
+real ambiguity in what was requested.
+
 Each field is independently optional on every entry, following the
 identical rule: supply to introduce or revise, omit to leave whatever's
 already stored untouched. Trust your own more recent, confirmed

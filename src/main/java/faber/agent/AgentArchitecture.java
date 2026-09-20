@@ -12,7 +12,6 @@ import org.json.JSONObject;
 import com.anthropic.models.messages.Model;
 
 import faber.agent.LlmClient.LlmCallResult;
-import faber.agent.PlanResult.ActionInfo;
 import faber.agent.formal.Coherence;
 import faber.agent.formal.CoreTuple;
 import faber.agent.formal.TupleExtractor;
@@ -41,10 +40,12 @@ public class AgentArchitecture {
 	private PlanResult currentPlanResult;
 	private ActResult currentActResult;
 	
-	private WellFormedness.Result currentWF;
-    private CoreTuple currentCoreTuple;
-    private Coherence.Result currentCoherence;
+
 	private CoreTuple previousTuple;
+	private CoreTuple currentCoreTuple;
+	private WellFormedness.Result currentWF;
+	private Coherence.Result currentCoherence;
+	private boolean currentGoalWasAlreadySatisfiedBeforeThisCycle;
     
 	/* LLM related */
 	private String currentContext;
@@ -246,8 +247,29 @@ public class AgentArchitecture {
 	
 	
 	private void doChecks() {
-		currentCoreTuple = extractor.extract(currentPercepts, currentPlanResult, goalLedger, intentionLedger);
+		// checkTriggerFidelity must run BEFORE extract() — extract() is what applies this cycle's own
+		// <intention_changes> to the ledgers (registering a new trigger, clearing one via resolveGoal),
+		// and checkTriggerFidelity needs to see each trigger's PRE-this-cycle state to check whether
+		// THIS cycle's percepts satisfied it. Reordering these (extract() first) silently loses every
+		// resolution where the same cycle that satisfies a trigger also replaces or clears it — which,
+		// in practice, is nearly every real resolution, since acting on a satisfied trigger almost always
+		// means moving on to a new plan/trigger or closing the goal out in that same cycle. Confirmed via
+		// a real run (Scenario05) that showed zero TriggerFidelity output at any resolution point despite
+		// WF and Coherence both reporting normally — the audit wasn't failing, it was running against a
+		// ledger this cycle's own update had already overwritten.
 		checkTriggerFidelity();
+
+		// Same reasoning applies to C3 (Coherence): "already satisfied" has to mean satisfied as of
+		// BEFORE this cycle's own action, not after — the common, correct pattern of a single cycle
+		// both delivering a goal's result and marking it achieved in the same <intention_changes> entry
+		// must not be judged as targeting an already-satisfied goal. The action's own cited goal id is
+		// available directly from currentPlanResult, with no dependency on extract() having run yet.
+		String actionGoalId = currentPlanResult.getActInfo().goalId();
+		GoalStatus priorStatus = actionGoalId != null ? intentionLedger.statusOf(actionGoalId) : null;
+		currentGoalWasAlreadySatisfiedBeforeThisCycle =
+				priorStatus == GoalStatus.ACHIEVED || priorStatus == GoalStatus.DROPPED;
+
+		currentCoreTuple = extractor.extract(currentPercepts, currentPlanResult, goalLedger, intentionLedger);
 		checkWellformedness();
 		checkCoherence();		
 	}
@@ -318,7 +340,7 @@ public class AgentArchitecture {
 		// rather than picking one.
 		String goalContent = currentCoreTuple.isReactive() ? null : combineGoalDescriptionAndPlan(
 				goalLedger.descriptionOf(currentCoreTuple.G), intentionLedger.planOf(currentCoreTuple.G));
-		currentCoherence = Coherence.check(currentCoreTuple, previousTuple, goalContent, false);
+		currentCoherence = Coherence.check(currentCoreTuple, previousTuple, goalContent, currentGoalWasAlreadySatisfiedBeforeThisCycle);
 		previousTuple = currentCoreTuple;
 		tupleTrace.add(currentCoreTuple);		
 	}
@@ -437,6 +459,7 @@ public class AgentArchitecture {
 				if (g.trigger != null) {
 					sb.append("\n - trigger: condition=" + g.trigger.condition
 							+ ", signal=" + g.trigger.signalArtifactId + "/" + g.trigger.signalName
+							+ ", signal_name_alternatives=" + g.trigger.signalNameAlternatives
 							+ ", operation_name=" + g.trigger.operationName
 							+ ", value_contains=" + g.trigger.signalValueContains
 							+ ", recurring=" + g.trigger.recurring);
