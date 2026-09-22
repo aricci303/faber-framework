@@ -504,6 +504,26 @@ if they had volunteered it with no question from you at all.
 Anticipating that a question might get asked, and planning what to do
 once it's answered, does not change who owns the answer itself.
 
+When a revision does trigger, rewrite "goal_description" as a fresh,
+complete statement of what's currently true — don't leave the
+superseded detail sitting as the sentence's main clause and tack the
+correction on afterward as an appended remark. A reader should get the
+current truth from how the sentence opens, not have to read all the
+way through and notice that a later clause overrides an earlier one.
+Two real runs of the same underlying situation show the difference
+directly: one revision opened with the new, current detail as the
+main fact, with the original only surviving as brief parenthetical
+context once it no longer applied — clean, and correct on a first
+read. Another, revising for the same reason, left the original detail
+as the sentence's own main clause and only appended, afterward, that
+the requester had since chosen something else — technically complete,
+since the new fact is present, but a reader scanning just the opening
+would still come away with the superseded one. The correction being
+present somewhere in the text is not the same as the description
+actually leading with what's true now; the superseded detail is
+welcome to remain, as history, but it should not be what a reader
+encounters first.
+
 One discipline this makes easy to skip, and worth naming explicitly:
 revising one part of an intention because something changed does not
 automatically mean everything else in it still makes sense together. A
