@@ -22,6 +22,18 @@ import faber.environment.Workspace;
  * agent's own tracking survives across that gap and correctly resumes
  * the original three-subgoal plan rather than losing the thread.
  *
+ * The follow-up message waits for the agent to have actually sent its
+ * own "which date would you like?" message before arriving — confirmed
+ * (by direct code reading, after a real run's own goal_description
+ * unexpectedly wasn't revised on the date change) that a prior version
+ * used a fixed sleep instead, which raced against real, variable LLM
+ * call latency: depending how fast a given run's calls happened to
+ * complete, the user's follow-up could land either before the agent's
+ * own question (preempting it) or after (answering it) — two genuinely
+ * different situations, tested interchangeably under the same nominal
+ * scenario without either the code or its own doc comment disclosing
+ * that the timing wasn't actually guaranteed.
+ *
  * Deliberately not specified: whether the hotel dates should shift to
  * match a delayed flight date. Left open on purpose, to see whether the
  * agent reasons about that consistency on its own rather than being
@@ -60,9 +72,19 @@ public final class Scenario05Main {
                         + "other dates are available and let me know before proceeding further — don't "
                         + "book the hotel until the flight situation is resolved.");
 
-                // Gives the agent real cycles to hit the failure, check alternatives, and report
-                // back before the user's follow-up arrives and resolves the interruption.
-                Thread.sleep(25000);
+                // Waits for the agent to actually send its own message (the "which date"
+                // question) before injecting the follow-up, rather than guessing at a fixed
+                // sleep duration — that raced against real, variable LLM call latency, and could
+                // land either side of the agent's own question depending on how fast a given
+                // run's calls happened to complete, silently testing two different situations
+                // (the user's change preempting the agent's question, versus answering it)
+                // under the same nominal scenario. The timeout below is a safety net only, not
+                // the primary mechanism — if it's ever hit, the agent hasn't sent anything yet
+                // for a genuinely long time, which is its own separate finding worth noticing.
+                long deadline = System.currentTimeMillis() + 90_000;
+                while (userConsole.sentMessageCount() == 0 && System.currentTimeMillis() < deadline) {
+                    Thread.sleep(200);
+                }
                 userConsole.simulateIncomingMessage("Let's do December 26th instead.");
             } catch (InterruptedException ignored) {
             }

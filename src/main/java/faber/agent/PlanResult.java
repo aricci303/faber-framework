@@ -96,7 +96,9 @@ public final class PlanResult {
      * for; goalDescription is only ever supplied when the goal itself
      * is being introduced or has genuinely changed (the assigner's own
      * words, not the agent's approach to it); plan is the agent's own,
-     * entirely its own to revise.
+     * entirely its own to revise. parentGoalId, when supplied, names
+     * the goal this one exists in service of — only meaningful the
+     * cycle a goal is first introduced, and never revised afterward.
      */
     public static final class IntentionEntry {
         public final String goalId;
@@ -104,13 +106,16 @@ public final class PlanResult {
         public final String plan;
         public final GoalStatus status;
         public final TriggerSpec trigger;
+        public final String parentGoalId;
 
-        IntentionEntry(String goalId, String goalDescription, String plan, GoalStatus status, TriggerSpec trigger) {
+        IntentionEntry(String goalId, String goalDescription, String plan, GoalStatus status,
+                       TriggerSpec trigger, String parentGoalId) {
             this.goalId = goalId;
             this.goalDescription = goalDescription;
             this.plan = plan;
             this.status = status;
             this.trigger = trigger;
+            this.parentGoalId = parentGoalId;
         }
 
         static IntentionEntry parse(JSONObject g) {
@@ -118,6 +123,7 @@ public final class PlanResult {
             String goalDescription = g.has("goal_description") ? (String) g.get("goal_description") : null;
             String plan = g.has("plan") ? (String) g.get("plan") : null;
             GoalStatus status = g.has("status") ? GoalStatus.fromJsonValue((String) g.get("status")) : null;
+            String parentGoalId = g.has("parent_goal_id") ? (String) g.get("parent_goal_id") : null;
             TriggerSpec trigger = null;
             if (g.has("pending_trigger")) {
             	Object obj = g.get("pending_trigger");
@@ -127,7 +133,7 @@ public final class PlanResult {
             		System.err.println("ERROR: pending_trigger is not a JSONObjecy");
             	}
             }
-            return new IntentionEntry(goalId, goalDescription, plan, status, trigger);
+            return new IntentionEntry(goalId, goalDescription, plan, status, trigger, parentGoalId);
         }
     }
     

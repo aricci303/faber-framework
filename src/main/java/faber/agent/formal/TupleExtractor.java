@@ -41,7 +41,7 @@ public interface TupleExtractor {
             // caller, from the same entry — neither ledger knows about the other on its own.
             for (PlanResult.IntentionEntry g : planResult.getIntentionChanges()) {
                 if (g.goalId == null) continue;
-                goalLedger.registerOrUpdate(g.goalId, g.goalDescription);
+                goalLedger.registerOrUpdate(g.goalId, g.goalDescription, g.parentGoalId);
                 intentionLedger.registerOrUpdate(g.goalId, g.plan);
                 intentionLedger.registerTrigger(g.goalId, g.trigger);
                 intentionLedger.resolveGoal(g.goalId, g.status);

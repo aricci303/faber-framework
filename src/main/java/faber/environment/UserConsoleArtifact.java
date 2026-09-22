@@ -16,6 +16,15 @@ public final class UserConsoleArtifact extends Artifact {
 
 	public static final String type = "UserConsole";
 
+	// Purely for external observability — e.g. a scenario driver polling for "the agent has
+	// actually sent something" rather than guessing at a fixed sleep duration, which is a race
+	// condition against real, variable LLM call latency, not a deterministic wait. Doesn't
+	// change send_msg_to_user's own behavior at all, just makes it observable from outside.
+	private final java.util.concurrent.atomic.AtomicInteger sentMessageCount =
+			new java.util.concurrent.atomic.AtomicInteger(0);
+
+	public int sentMessageCount() { return sentMessageCount.get(); }
+
     public UserConsoleArtifact(String id, Workspace workspace) {
         super(id, type, workspace);
     }
@@ -26,6 +35,7 @@ public final class UserConsoleArtifact extends Artifact {
             case "send_msg_to_user": {
                 String text = params.getString("text");
                 System.out.println("[MSG TO USER] " + text); // stand-in for real delivery in this sketch
+                sentMessageCount.incrementAndGet();
                 return List.of();
             }
             default:

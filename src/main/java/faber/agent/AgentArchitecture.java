@@ -12,6 +12,7 @@ import org.json.JSONObject;
 import com.anthropic.models.messages.Model;
 
 import faber.agent.LlmClient.LlmCallResult;
+import faber.agent.PlanResult.ActionInfo;
 import faber.agent.formal.Coherence;
 import faber.agent.formal.CoreTuple;
 import faber.agent.formal.TupleExtractor;
@@ -23,6 +24,9 @@ import faber.environment.Workspace;
 public class AgentArchitecture {
 
 	final static private long PERCEPT_TIMEOUT = 30_000;
+
+	/** The one goal every other goal can trace back to as an ancestor — see init(). */
+	public final static String STANDING_GOAL_ID = "serve-user";
 	
 	private Agent agent;
 
@@ -97,6 +101,27 @@ public class AgentArchitecture {
 		stateOfMind = new StateOfMind();
 		goalLedger = new GoalLedger();
 		intentionLedger = new IntentionLedger();
+
+		// Registered directly by the harness, not via a model-authored <intention_changes> entry —
+		// this goal exists from cycle one, before any model output has happened at all, which is
+		// exactly the case the wire protocol has no way to represent on its own. Every goal the model
+		// itself introduces can cite this as parent_goal_id, giving even a purely reactive moment
+		// (observing user-console-01 by default, with nothing else pending) a real, registered goal
+		// to be MEANS_END relative to, rather than defaulting to REACTIVE for lack of anywhere to
+		// attach. See the "Goal hierarchy" section of the system prompt for what this changes for
+		// the model, and why REACTIVE still exists as a genuine possibility, not a removed one.
+		//
+		// Registering only the goal (GoalLedger) and not also an intention (IntentionLedger) would
+		// leave it invisible in ONGOING INTENTIONS — that rendering reads activeIntentions(), which
+		// has no entry for a goal that was never given a plan. A registered-but-invisible standing
+		// goal is worse than not having one at all: the model would have to take the system prompt's
+		// word for its existence, cycle after cycle, with nothing in its own context ever confirming
+		// it. Both ledgers are seeded together here for exactly that reason.
+		goalLedger.registerOrUpdate(STANDING_GOAL_ID,
+				"Serve the user's requests as they arise, remaining available and responsive by default.");
+		intentionLedger.registerOrUpdate(STANDING_GOAL_ID,
+				"Observe user-console-01 by default and respond to whatever the user asks as it arrives. "
+				+ "Every specific request becomes its own subgoal, in service of this one.");
 
 		tupleTrace = new ArrayList<>();
 		correlationCounter = new AtomicInteger(0);
@@ -370,6 +395,8 @@ public class AgentArchitecture {
 			sb.append("- goal: ").append(i.goalId);
 			String description = goalLedger.descriptionOf(i.goalId);
 			if (description != null) sb.append("\n - goal_description: ").append(description);
+			String parentGoalId = goalLedger.parentOf(i.goalId);
+			if (parentGoalId != null) sb.append("\n - in service of: ").append(parentGoalId);
 			if (i.plan != null) sb.append("\n - plan: ").append(i.plan);
 
 			if (i.trigger != null) {
@@ -452,6 +479,9 @@ public class AgentArchitecture {
 				}
 				if (g.goalDescription != null) {
 					sb.append("\n - goal_description: " + g.goalDescription);
+				}
+				if (g.parentGoalId != null) {
+					sb.append("\n - parent_goal_id: " + g.parentGoalId);
 				}
 				if (g.plan != null) {
 					sb.append("\n - plan: " + g.plan);

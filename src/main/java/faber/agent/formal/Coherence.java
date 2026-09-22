@@ -34,6 +34,15 @@ public final class Coherence {
      */
     static boolean simplifiedMeansEndPlausible(CoreTuple tuple, String goalContent) {
         if (tuple.r != Relation.MEANS_END || goalContent == null) return true;
+        // An empty WPrime means nothing was cited at all — there is nothing to check for
+        // irrelevance, a different situation from something being cited and failing to overlap.
+        // Without this, any MEANS_END action taken with zero new percepts (the standing goal,
+        // correctly cited during a genuinely idle cycle) would fail here every single time,
+        // regardless of how well-justified the citation is — not an occasional false positive,
+        // a structural one, confirmed directly once citing the standing goal on empty cycles
+        // became the correct behavior rather than something REACTIVE's short-circuit above
+        // always caught first.
+        if (tuple.WPrime.isEmpty()) return true;
         String[] goalWords = goalContent.toLowerCase().split("\\W+");
         for (String w : tuple.WPrime) {
             String lw = w.toLowerCase();
