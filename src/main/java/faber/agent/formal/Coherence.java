@@ -59,8 +59,20 @@ public final class Coherence {
     /** C3, simplified: a goal already resolved (achieved or dropped) cannot still be the target of a
      *  goal-directed (ACHIEVEMENT or MAINTENANCE) action — including a MAINTENANCE goal that was
      *  dropped: a called-off standing watch being kept anyway is just as inconsistent as continuing
-     *  to pursue an already-achieved one. */
+     *  to pursue an already-achieved one.
+     *
+     *  STOP_OBSERVING is exempted from this specifically: unlike every other action kind, it can
+     *  never represent continuing to pursue a goal — it is structurally the act of ceasing to, never
+     *  continuing to. Citing an already-resolved goal on a STOP_OBSERVING is not "a called-off watch
+     *  kept anyway" — it is the literal calling-off, completed, and is in fact the single most common
+     *  legitimate reason to cite a resolved goal at all (tearing down observation that existed only
+     *  in service of it). Confirmed as a real, recurring pattern: four separate real cycles this
+     *  session committed a STOP_OBSERVING motivated by a goal resolved earlier the same session,
+     *  every one of them a genuine cleanup, none a goal being kept alive past its own closure. The
+     *  exemption is scoped to this one action kind only — an INVOKE, FOCUS, or WAIT citing an
+     *  already-resolved goal remains exactly the inconsistency this check exists to catch. */
     static boolean simplifiedConsistent(CoreTuple tuple, boolean goalAlreadySatisfied) {
+        if (tuple.A == PlanResult.ActionKind.STOP_OBSERVING) return true;
         return !(tuple.r != Relation.REACTIVE && goalAlreadySatisfied);
     }
 

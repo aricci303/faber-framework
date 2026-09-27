@@ -31,6 +31,34 @@ public final class IntentionLedger {
 
     private final Map<String, Intention> intentions = new LinkedHashMap<>();
 
+    // Thread-safe mirror of "this goal's intention is currently active" — intentions itself is a
+    // plain LinkedHashMap, mutated only by the agent's own thread, unsafe to poll from a separate
+    // scenario-driver thread. Updated at exactly the two points that change active status: adoption
+    // (registerOrUpdate, for a genuinely new intention) and explicit resolution (resolveGoal, to
+    // ACHIEVED or DROPPED) — registerTrigger, resolveTrigger, and a plan revision on an existing
+    // intention never change active status, so they don't touch this. Mirrors the same
+    // AtomicBoolean discipline as Artifact.isCurrentlyObserved(), for the same reason: a scenario
+    // driver needing to know "has this goal genuinely left ONGOING INTENTIONS yet" is a real
+    // readiness condition, immune to how many cycles the agent takes to reach it — unlike a fixed
+    // sleep or message count, which only ever infer that indirectly.
+    private final java.util.concurrent.ConcurrentHashMap<String, Boolean> activeMirror =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Safe to poll from any thread — see the field's own doc comment above. False for a goal id
+     *  that was never registered, or has since been resolved, same as isActive() itself. */
+    public boolean isActiveSafe(String goalId) { return activeMirror.getOrDefault(goalId, false); }
+
+    /** Thread-safe count of goals resolved so far (ACHIEVED or DROPPED), derived from the same
+     *  mirror. Exists for a scenario driver that can't know a specific goal id in advance (ids are
+     *  always the model's own choice) but can chain a sequence of waits, each for exactly one more
+     *  resolution than the last, when the narrative guarantees only one thing could plausibly
+     *  resolve next — see ManualRetentionMain for a concrete case of this. */
+    public int resolvedGoalsCount() {
+        int count = 0;
+        for (Boolean active : activeMirror.values()) if (!active) count++;
+        return count;
+    }
+
     /**
      * Adopts a new intention for this goal id if none exists yet, or revises the plan of an existing
      * one if plan is non-null. A freshly-adopted intention starts ONGOING with no trigger.
@@ -39,6 +67,7 @@ public final class IntentionLedger {
         Intention current = intentions.get(goalId);
         if (current == null) {
             intentions.put(goalId, Intention.adopt(goalId, plan));
+            activeMirror.put(goalId, true);
         } else if (plan != null) {
             intentions.put(goalId, current.withPlan(plan));
         }
@@ -94,6 +123,7 @@ public final class IntentionLedger {
         Intention current = intentions.get(goalId);
         if (current == null) return;
         intentions.put(goalId, current.resolved(status));
+        activeMirror.put(goalId, false);
     }
 
     /** Every currently-registered pending trigger, keyed by the goal id its intention is for. */

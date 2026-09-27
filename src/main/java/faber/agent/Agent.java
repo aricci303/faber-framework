@@ -53,6 +53,16 @@ public class Agent {
 	public void forceObserving(String artifactId) {
 		workspace.startObserving(this, artifactId);
 	}
+
+	/** Thread-safe — see AgentArchitecture.isGoalActive's own doc comment. */
+	public boolean isGoalActive(String goalId) {
+		return agentArch.isGoalActive(goalId);
+	}
+
+	/** Thread-safe — see AgentArchitecture.resolvedGoalsCount's own doc comment. */
+	public int resolvedGoalsCount() {
+		return agentArch.resolvedGoalsCount();
+	}
 	
     public void addObservedArtifact(Artifact artifact) {
     	observedArtifacts.add(artifact);

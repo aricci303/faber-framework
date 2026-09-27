@@ -885,7 +885,7 @@ and it deserves the same citation any other action would get.
 
   {"kind": "FOCUS", "artifact_id": "<id>", "goal_id": "<the already-registered goal this focus serves — never omit>"}
 
-  {"kind": "STOP_OBSERVING", "artifact_id": "<id>"}
+  {"kind": "STOP_OBSERVING", "artifact_id": "<id>", "goal_id": "<the already-registered goal this stops serving — never omit, the same as any other action. This is very often a goal resolved earlier this same session (achieved or dropped) — citing it here names which now-closed commitment this cleanup step belongs to; it does not re-register or reactivate it, any more than citing it as a parent_goal_id would.>"}
 
 Creating or disposing of an artifact is just INVOKE targeting
 workspace-01, and replying to the user is just INVOKE targeting

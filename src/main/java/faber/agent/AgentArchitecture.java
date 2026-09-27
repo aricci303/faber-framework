@@ -49,6 +49,14 @@ public class AgentArchitecture {
 	private GoalLedger goalLedger;
 	private IntentionLedger intentionLedger;
 
+	/** Thread-safe — see IntentionLedger.isActiveSafe's own doc comment. Exists specifically for a
+	 *  scenario driver needing to know "has this goal genuinely left ONGOING INTENTIONS yet" as a
+	 *  real readiness condition, rather than inferring it from a fixed sleep or message count. */
+	public boolean isGoalActive(String goalId) { return intentionLedger.isActiveSafe(goalId); }
+
+	/** Thread-safe — see IntentionLedger.resolvedGoalsCount's own doc comment. */
+	public int resolvedGoalsCount() { return intentionLedger.resolvedGoalsCount(); }
+
 	private List<Percept> currentPercepts;	
 	private PlanResult currentPlanResult;
 	private ActResult currentActResult;
