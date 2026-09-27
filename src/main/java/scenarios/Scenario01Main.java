@@ -1,6 +1,7 @@
 package scenarios;
 
 import faber.agent.Agent;
+import faber.agent.SeedGoal;
 import faber.environment.Workspace;
 
 /**
@@ -20,7 +21,8 @@ public final class Scenario01Main {
         Counter counter01 = new Counter("counter-01", workspace, 0);
         workspace.provision("counter-01", "Counter", counter01);
 
-        Agent agent = new Agent("agent-0");
+        Agent agent = new Agent("agent-0", new SeedGoal("serve-user",
+                "Serve the user's requests as they arise, remaining available and responsive by default."));
         agent.init(workspace);
         // agent.enableCycleDumpLogging(false);
 

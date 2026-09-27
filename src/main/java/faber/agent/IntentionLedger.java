@@ -113,4 +113,22 @@ public final class IntentionLedger {
         }
         return active;
     }
+
+    /**
+     * Every intention that has been explicitly closed out (ACHIEVED or DROPPED), in registration
+     * order — exists for the same reason MECHANICAL LOG exists for pending operations: without a
+     * harness-guaranteed, persistent record of a resolution, the only place that fact ever existed
+     * was the cycle's own STATE OF MIND narrative, which is explicitly delta-only and not guaranteed
+     * to survive even one further cycle. Confirmed as a real, recurring failure this caused: a goal
+     * correctly resolved, then re-registered one or two cycles later as though it had never existed,
+     * because its own absence from activeIntentions() was the only signal available, and absence is
+     * structurally identical whether a goal was never registered or was resolved moments ago.
+     */
+    public Iterable<Intention> resolvedIntentions() {
+        java.util.List<Intention> resolved = new java.util.ArrayList<>();
+        for (Intention i : intentions.values()) {
+            if (!i.isActive()) resolved.add(i);
+        }
+        return resolved;
+    }
 }

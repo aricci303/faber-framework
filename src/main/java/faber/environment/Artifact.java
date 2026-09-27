@@ -34,6 +34,17 @@ public abstract class Artifact {
     protected final Workspace workspace;
     private final Map<String, Object> obsProperties = new LinkedHashMap<>();
     private ArrayList<Agent> observerAgents;
+    // Thread-safe mirror of "at least one agent is currently observing this artifact" — observerAgents
+    // itself is a plain ArrayList, mutated only by the agent's own thread, unsafe to poll from a
+    // separate scenario-driver thread. This is what a driver should actually condition event
+    // injection on: e.g. "wait until pager-01 is observed, then fire" is a genuine readiness
+    // condition, immune to how many cycles the agent happens to take to reach it — unlike a fixed
+    // cycle count or a fixed sleep duration, both of which race against real, variable LLM latency.
+    private final java.util.concurrent.atomic.AtomicBoolean currentlyObserved =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    /** Safe to poll from any thread — see the field's own doc comment above. */
+    public boolean isCurrentlyObserved() { return currentlyObserved.get(); }
 
     protected Artifact(String id, String type, Workspace workspace) {
         this.id = id;
@@ -68,6 +79,7 @@ public abstract class Artifact {
 
     public void addObserverAgent(Agent agent) {
     	observerAgents.add(agent);
+    	currentlyObserved.set(true);
     	// agent.notifyNewPercept(Percept.focusChanged(id, true));
     }
 
@@ -81,6 +93,7 @@ public abstract class Artifact {
     			break;
     		}
     	}
+    	currentlyObserved.set(!observerAgents.isEmpty());
     }
     
     public void notifyNewPerceptToObserverAgents(Percept p) {

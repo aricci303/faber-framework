@@ -28,7 +28,8 @@ public final class StageProfile {
 
     public boolean relationAllowed(Relation r) {
         switch (r) {
-            case MEANS_END:
+            case ACHIEVEMENT:
+            case MAINTENANCE:
             case REACTIVE:
                 return active.contains(Stage.CORE);
             case CONSTRAINT_DRIVEN:

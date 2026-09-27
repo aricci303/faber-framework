@@ -150,6 +150,11 @@ public final class Workspace {
     
     public Manual manualFor(String type) { return manualsByType.get(type); }
 
+    /** Every registered type's manual, present-in-workspace or only-creatable alike — used to build
+     *  the lightweight "available types" listing (type + one-line function), distinct from the full
+     *  manual JSON, which is now fetched on demand via workspace-01's get_manual operation. */
+    public java.util.Collection<Manual> allManuals() { return manualsByType.values(); }
+
     public Artifact instanceOf(String id) { return instances.get(id); }
 
     public void scheduleOpExecution(Runnable op) {

@@ -12,8 +12,11 @@ import org.json.JSONObject;
  * structured, homogeneous array — every intention newly adopted or
  * revised this cycle, whether or not it's the one driving this
  * cycle's action), and <action> (kind, parameters, and a bare goal_id
- * string referencing one of the agent's own goals, or absent for a
- * reactive action with none).
+ * string referencing one of the agent's own goals — the model can
+ * still leave it absent at the parsing level, but "no intention, no
+ * action" now holds without exception: an absent goal_id is always a
+ * missed citation the moment it happens, not a legitimate reactive
+ * action with nothing behind it; see WellFormedness's WF8).
  *
  * Aligned with Bratman's practical-reasoning vocabulary, and BDI more
  * generally: a goal is the state of affairs being pursued — the WHAT,
@@ -99,6 +102,10 @@ public final class PlanResult {
      * entirely its own to revise. parentGoalId, when supplied, names
      * the goal this one exists in service of — only meaningful the
      * cycle a goal is first introduced, and never revised afterward.
+     * goalKind, likewise only meaningful at first introduction and
+     * never revised afterward, declares whether this goal is
+     * ACHIEVEMENT (has a terminal state) or MAINTENANCE (a standing
+     * condition with none) — see GoalKind's own doc.
      */
     public static final class IntentionEntry {
         public final String goalId;
@@ -107,15 +114,17 @@ public final class PlanResult {
         public final GoalStatus status;
         public final TriggerSpec trigger;
         public final String parentGoalId;
+        public final GoalKind goalKind;
 
         IntentionEntry(String goalId, String goalDescription, String plan, GoalStatus status,
-                       TriggerSpec trigger, String parentGoalId) {
+                       TriggerSpec trigger, String parentGoalId, GoalKind goalKind) {
             this.goalId = goalId;
             this.goalDescription = goalDescription;
             this.plan = plan;
             this.status = status;
             this.trigger = trigger;
             this.parentGoalId = parentGoalId;
+            this.goalKind = goalKind;
         }
 
         static IntentionEntry parse(JSONObject g) {
@@ -124,6 +133,7 @@ public final class PlanResult {
             String plan = g.has("plan") ? (String) g.get("plan") : null;
             GoalStatus status = g.has("status") ? GoalStatus.fromJsonValue((String) g.get("status")) : null;
             String parentGoalId = g.has("parent_goal_id") ? (String) g.get("parent_goal_id") : null;
+            GoalKind goalKind = g.has("goal_kind") ? GoalKind.fromJsonValue((String) g.get("goal_kind")) : null;
             TriggerSpec trigger = null;
             if (g.has("pending_trigger")) {
             	Object obj = g.get("pending_trigger");
@@ -133,7 +143,7 @@ public final class PlanResult {
             		System.err.println("ERROR: pending_trigger is not a JSONObjecy");
             	}
             }
-            return new IntentionEntry(goalId, goalDescription, plan, status, trigger, parentGoalId);
+            return new IntentionEntry(goalId, goalDescription, plan, status, trigger, parentGoalId, goalKind);
         }
     }
     

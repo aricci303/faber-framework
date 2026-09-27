@@ -40,7 +40,7 @@ import faber.environment.Workspace;
  * agent reasons about that consistency on its own rather than being
  * told to.
  */
-public final class Scenario05Main {
+public final class Scenario05MainNoInitialPlan {
 
     public static void main(String[] args) throws Exception {
         System.setOut(new java.io.PrintStream(System.out, true, "UTF-8"));
@@ -56,8 +56,7 @@ public final class Scenario05Main {
         HotelBookingArtifact hotels = new HotelBookingArtifact("hotel-01", workspace);
         workspace.provision("hotel-01", "HotelBooking", hotels);
 
-        Agent agent = new Agent("agent-0", new SeedGoal("serve-user",
-                "Serve the user's requests as they arise, remaining available and responsive by default."));
+        Agent agent = new Agent("agent-0", new SeedGoal("serve-user", "Serve the user's requests as they arise, remaining available and responsive by default."));
         agent.init(workspace);
 
         var userConsole = workspace.getUserConsole();

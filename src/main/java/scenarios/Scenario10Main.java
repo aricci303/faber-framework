@@ -1,6 +1,7 @@
 package scenarios;
 
 import faber.agent.Agent;
+import faber.agent.SeedGoal;
 import faber.environment.Workspace;
 
 /**
@@ -53,7 +54,8 @@ public final class Scenario10Main {
         HotelBookingArtifact hotels = new HotelBookingArtifact("hotel-01", workspace);
         workspace.provision("hotel-01", "HotelBooking", hotels);
 
-        Agent agent = new Agent("agent-0");
+        Agent agent = new Agent("agent-0", new SeedGoal("serve-user",
+                "Serve the user's requests as they arise, remaining available and responsive by default."));
         agent.init(workspace);
 
         var userConsole = workspace.getUserConsole();

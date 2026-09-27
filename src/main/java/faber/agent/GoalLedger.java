@@ -24,6 +24,15 @@ import java.util.Set;
  * changed which larger goal this serves"; if that ever seems to be
  * happening, it is a new goal, not a reparenting of an old one.
  *
+ * Holds one further thing about a goal's WHAT, write-once the same
+ * way: its GoalKind — ACHIEVEMENT or MAINTENANCE. See GoalKind's own
+ * doc for why this is a classification, not a revisable claim, and why
+ * it lives here (goal-side) rather than as a trigger's own recurring
+ * flag (intention-side) — a goal's own standing or terminal character
+ * is something the assigner specifies about what they want, the same
+ * WHAT-level status a concrete date or destination already has, not
+ * the agent's own strategy for pursuing it.
+ *
  * Deliberately narrow and independent of IntentionLedger: this class
  * holds nothing about plans, status, or triggers, and has no reference
  * to the intention side at all. Earlier versions of this class held
@@ -43,15 +52,16 @@ public final class GoalLedger {
 
     private final Map<String, String> descriptions = new LinkedHashMap<>();
     private final Map<String, String> parents = new LinkedHashMap<>();
+    private final Map<String, GoalKind> kinds = new LinkedHashMap<>();
 
     /**
      * Registers a goal if new, or revises its description if description is non-null for a goal that
      * already exists. Omitting description (null) on an already-registered goal leaves it untouched;
      * omitting it while registering a brand-new goal id simply registers the id with no description yet.
-     * parentGoalId, if non-null, is recorded the first time this goal is registered and never revised
-     * afterward, regardless of what a later call for the same goal id supplies.
+     * parentGoalId and kind, if non-null, are recorded the first time this goal is registered and never
+     * revised afterward, regardless of what a later call for the same goal id supplies.
      */
-    public void registerOrUpdate(String goalId, String description, String parentGoalId) {
+    public void registerOrUpdate(String goalId, String description, String parentGoalId, GoalKind kind) {
         if (description != null) {
             descriptions.put(goalId, description);
         } else {
@@ -60,11 +70,19 @@ public final class GoalLedger {
         if (parentGoalId != null) {
             parents.putIfAbsent(goalId, parentGoalId);
         }
+        if (kind != null) {
+            kinds.putIfAbsent(goalId, kind);
+        }
+    }
+
+    /** Convenience overload for a goal with no parent and no declared kind (defaults to TO_BE_DECIDED — see kindOf). */
+    public void registerOrUpdate(String goalId, String description, String parentGoalId) {
+        registerOrUpdate(goalId, description, parentGoalId, null);
     }
 
     /** Convenience overload for a goal with no parent — a standing, top-level goal. */
     public void registerOrUpdate(String goalId, String description) {
-        registerOrUpdate(goalId, description, null);
+        registerOrUpdate(goalId, description, null, null);
     }
 
     public boolean isRegistered(String goalId) { return descriptions.containsKey(goalId); }
@@ -73,6 +91,11 @@ public final class GoalLedger {
 
     /** The goal this one exists in service of, or null if it's a standing, top-level goal. */
     public String parentOf(String goalId) { return parents.get(goalId); }
+
+    /** This goal's declared kind, or TO_BE_DECIDED if none was ever declared — see GoalKind's own
+     *  doc on why an honestly-unclassified default, not a silently-plausible ACHIEVEMENT one, is
+     *  the right choice for a goal whose kind was never stated. */
+    public GoalKind kindOf(String goalId) { return kinds.getOrDefault(goalId, GoalKind.TO_BE_DECIDED); }
 
     /** Every registered goal id, in registration order. */
     public Set<String> allGoalIds() { return Collections.unmodifiableSet(descriptions.keySet()); }

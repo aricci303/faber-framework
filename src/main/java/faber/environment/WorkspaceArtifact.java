@@ -39,6 +39,16 @@ public final class WorkspaceArtifact extends Artifact {
                 workspace.dispose(artifactId); // triggers the pending-op cascade + notifyArtifactLeft
                 return List.of();
             }
+            case "get_manual": {
+                String targetType = (String) params.get("type");
+                Manual manual = workspace.manualFor(targetType);
+                if (manual == null) {
+                    throw new IllegalArgumentException(
+                            "no registered type '" + targetType + "' — check WORKSPACE's own \"available types\" "
+                            + "listing for the exact type name before calling this");
+                }
+                return List.of(manual.toJson());
+            }
             default:
                 throw new IllegalArgumentException("unknown operation: " + operationName);
         }
@@ -57,7 +67,8 @@ public final class WorkspaceArtifact extends Artifact {
     public static Manual manual() {
         return new Manual(
                 WorkspaceArtifact.type,
-                "create and dispose artifacts in this workspace, and observe membership changes",
+                "create and dispose artifacts in this workspace, observe membership changes, and "
+                + "fetch the full manual for any registered type on demand",
                 null, null,
                 List.of(),
                 List.of(
@@ -72,7 +83,14 @@ public final class WorkspaceArtifact extends Artifact {
                                 "instantiate a new artifact of a creatable type",
                                 List.of(new Manual.Param("artifact_id", "the id actually assigned"))),
                         new Manual.Operation("dispose_artifact(artifact_id)",
-                                "remove an artifact from the workspace", List.of())
+                                "remove an artifact from the workspace", List.of()),
+                        new Manual.Operation("get_manual(type)",
+                                "fetch the full manual for a registered, task-specific type — present in the "
+                                + "workspace now, or only creatable — whose full manual isn't already given to "
+                                + "you (see WORKSPACE's own \"available types\" listing for what's registered "
+                                + "and its one-line function; this is how you get the rest, when the one-line "
+                                + "summary isn't enough to act on)",
+                                List.of(new Manual.Param("manual", "the type's full manual, as JSON")))
                 ),
                 null
         );

@@ -1,6 +1,7 @@
 package scenarios;
 
 import faber.agent.Agent;
+import faber.agent.SeedGoal;
 import faber.environment.Workspace;
 
 /**
@@ -28,12 +29,18 @@ import faber.environment.Workspace;
  *      from the two plain standing beliefs, not collapsed into the
  *      same shape as them.
  *
- * The scenario driver later sends a message from the named sender,
- * well after everything else has settled, testing not just whether
- * all four were recognized up front but whether the one with a
- * genuine trigger is still correctly tracked and fires appropriately
- * much later — the same cross-cycle persistence question this whole
- * mechanism exists for, now combined with the enumeration question.
+ * The scenario driver sends a message from the named sender only once
+ * messaging-01 is actually observed — a genuine readiness condition,
+ * not a fixed delay (an earlier version used one, and a real run
+ * showed Marco's message arriving before messaging-01 was ever
+ * focused, an unintended timing confound on a scenario whose actual
+ * purpose is enumeration breadth, not concurrency robustness). This
+ * tests not just whether all four were recognized up front but
+ * whether the one with a genuine trigger is still correctly tracked
+ * and fires appropriately once it genuinely can — the same
+ * cross-cycle persistence question this whole mechanism exists for,
+ * now combined with the enumeration question, without timing fairness
+ * itself being a confound.
  */
 public final class Scenario07Main {
 
@@ -47,7 +54,8 @@ public final class Scenario07Main {
         MessagingArtifact messaging = new MessagingArtifact("messaging-01", workspace);
         workspace.provision("messaging-01", "MessagingApp", messaging);
 
-        Agent agent = new Agent("agent-0");
+        Agent agent = new Agent("agent-0", new SeedGoal("serve-user",
+                "Serve the user's requests as they arise, remaining available and responsive by default."));
         // agent.enableCycleDumpLogging(false);
         agent.init(workspace);
 
@@ -65,10 +73,15 @@ public final class Scenario07Main {
                         + "it eventually. Fourth: if you ever see a message from someone named Marco, "
                         + "flag it to me as high priority as soon as it arrives.");
 
-                // A long gap, well after the alarm and any note-writing should have settled, before
-                // the conditional commitment's actual trigger arrives — testing whether it survived
-                // both the initial multi-goal registration and everything that happened afterward.
-                Thread.sleep(80000);
+                // Injected only once messaging-01 is actually observed — see the class doc comment
+                // for why this replaced a fixed sleep. The deadline is a safety net only, mirroring
+                // Scenario05Main's own pattern: if it's ever hit, the agent never got around to
+                // focusing messaging-01 at all within a very generous window, which is itself a
+                // separate, worthwhile finding rather than the scenario silently hanging forever.
+                long deadline = System.currentTimeMillis() + 120_000;
+                while (!messaging.isCurrentlyObserved() && System.currentTimeMillis() < deadline) {
+                    Thread.sleep(200);
+                }
                 messaging.simulateIncomingMessage("Marco", "Can we talk about the budget tomorrow?");
             } catch (InterruptedException ignored) {
             }

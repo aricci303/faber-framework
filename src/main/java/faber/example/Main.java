@@ -4,6 +4,7 @@ import faber.agent.Agent;
 import faber.agent.LlmClient;
 import faber.agent.PlanResult;
 import faber.agent.PlanResult.ActionKind;
+import faber.agent.SeedGoal;
 import faber.agent.formal.CoreTuple;
 import faber.agent.formal.PredictiveSufficiencyProtocol;
 import faber.agent.formal.Relation;
@@ -32,7 +33,8 @@ public final class Main {
         SimpleCounter counter01 = new SimpleCounter("counter-01", workspace, 0);
         workspace.provision("counter-01", "SimpleCounter", counter01);
         
-        Agent agent = new Agent("agent-0");
+        Agent agent = new Agent("agent-0", new SeedGoal("serve-user",
+                "Serve the user's requests as they arise, remaining available and responsive by default."));
         // agent.enableCycleDumpLogging(false);
         agent.init(workspace);
         

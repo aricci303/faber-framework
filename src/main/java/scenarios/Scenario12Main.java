@@ -1,6 +1,7 @@
 package scenarios;
 
 import faber.agent.Agent;
+import faber.agent.SeedGoal;
 import faber.environment.Workspace;
 
 /**
@@ -55,7 +56,8 @@ public final class Scenario12Main {
         MonitoringArtifact monitoring = new MonitoringArtifact("monitoring-01", workspace);
         workspace.provision("monitoring-01", "Monitoring", monitoring);
 
-        Agent agent = new Agent("agent-0");
+        Agent agent = new Agent("agent-0", new SeedGoal("serve-user",
+                "Serve the user's requests as they arise, remaining available and responsive by default."));
         agent.init(workspace);
 
         var userConsole = workspace.getUserConsole();

@@ -7,16 +7,16 @@ import faber.agent.PlanResult;
 import faber.agent.PlanResult.ActionKind;
 
 /**
- * C1-C4 from the Core semantics note. C1 (means-end coherence) and C3
- * (consistency) are given deliberately simplified, best-effort
- * implementations — genuinely checking them needs semantic
- * understanding of the domain that a small, honest Stage 0 skeleton
- * shouldn't pretend to have. C2 (non-vacuous citation) is not checked
- * online at all: it is defined as a perturb-and-replay audit procedure
- * in the Core semantics note (expensive, audit-only, not a runtime
- * gate) and is deliberately left out of this online check. C4 (delta
- * discipline) is fully and correctly mechanically checkable and is
- * implemented for real.
+ * C1-C4 from the Core semantics note. C1 (goal-directed coherence,
+ * covering both ACHIEVEMENT and MAINTENANCE) and C3 (consistency) are
+ * given deliberately simplified, best-effort implementations —
+ * genuinely checking them needs semantic understanding of the domain
+ * that a small, honest Stage 0 skeleton shouldn't pretend to have. C2
+ * (non-vacuous citation) is not checked online at all: it is defined
+ * as a perturb-and-replay audit procedure in the Core semantics note
+ * (expensive, audit-only, not a runtime gate) and is deliberately left
+ * out of this online check. C4 (delta discipline) is fully and
+ * correctly mechanically checkable and is implemented for real.
  */
 public final class Coherence {
 
@@ -27,16 +27,19 @@ public final class Coherence {
     }
 
     /**
-     * C1, simplified: for a means-end tuple, require some keyword overlap
-     * between the cited subset and the goal's content. A crude proxy for
-     * "the action plausibly bears on the goal" — not a substitute for
-     * real semantic checking, and known to both over- and under-accept.
+     * C1, simplified: for a goal-directed tuple (ACHIEVEMENT or MAINTENANCE — anything not
+     * REACTIVE), require some keyword overlap between the cited subset and the goal's content. A
+     * crude proxy for "the action plausibly bears on the goal" — not a substitute for real semantic
+     * checking, and known to both over- and under-accept.
      */
     static boolean simplifiedMeansEndPlausible(CoreTuple tuple, String goalContent) {
-        if (tuple.r != Relation.MEANS_END || goalContent == null) return true;
+        // A REACTIVE tuple reaching this check is now also, always, a WF8 violation on the same
+        // tuple — this short-circuit is defensive at this point, not a normal path a well-formed
+        // tuple should ever actually take.
+        if (tuple.r == Relation.REACTIVE || goalContent == null) return true;
         // An empty WPrime means nothing was cited at all — there is nothing to check for
         // irrelevance, a different situation from something being cited and failing to overlap.
-        // Without this, any MEANS_END action taken with zero new percepts (the standing goal,
+        // Without this, any goal-directed action taken with zero new percepts (the standing goal,
         // correctly cited during a genuinely idle cycle) would fail here every single time,
         // regardless of how well-justified the citation is — not an occasional false positive,
         // a structural one, confirmed directly once citing the standing goal on empty cycles
@@ -53,9 +56,12 @@ public final class Coherence {
         return false;
     }
 
-    /** C3, simplified: a goal already marked satisfied cannot still be the target of a means-end action. */
+    /** C3, simplified: a goal already resolved (achieved or dropped) cannot still be the target of a
+     *  goal-directed (ACHIEVEMENT or MAINTENANCE) action — including a MAINTENANCE goal that was
+     *  dropped: a called-off standing watch being kept anyway is just as inconsistent as continuing
+     *  to pursue an already-achieved one. */
     static boolean simplifiedConsistent(CoreTuple tuple, boolean goalAlreadySatisfied) {
-        return !(tuple.r == Relation.MEANS_END && goalAlreadySatisfied);
+        return !(tuple.r != Relation.REACTIVE && goalAlreadySatisfied);
     }
 
     /** C4, real: the tuple must differ from the previous cycle's tuple, unless the action is WAIT. */
@@ -75,7 +81,7 @@ public final class Coherence {
         }
         if (!simplifiedConsistent(current, goalAlreadySatisfied)) {
             pass = false;
-            notes.add("C3 (simplified) failed: goal already satisfied but still targeted by a means-end action");
+            notes.add("C3 (simplified) failed: goal already resolved (achieved or dropped) but still targeted by a goal-directed action");
         }
         if (!deltaDisciplineHolds(current, previous)) {
             pass = false;

@@ -24,16 +24,19 @@ public class Agent {
 		logCycle = true;
 	}
 	
-	public Agent(String agentId) {
+	/** Every agent requires an explicit SeedGoal — there is no default, assistant-shaped one.
+	 *  See SeedGoal's own doc for why: if a goal's classification is ever genuinely ambiguous,
+	 *  that is the description's own fault to fix, not something a default should paper over. */
+	public Agent(String agentId, SeedGoal seedGoal) {
 		this();
 		this.agentId = agentId;
-		agentArch = new AgentArchitecture(this, eventQueue); 	
+		agentArch = new AgentArchitecture(this, eventQueue, seedGoal);
 	}
 
-	public Agent(String agentId, LlmClient client) {
+	public Agent(String agentId, LlmClient client, SeedGoal seedGoal) {
 		this();
 		this.agentId = agentId;
-		agentArch = new AgentArchitecture(this, eventQueue, client); 	
+		agentArch = new AgentArchitecture(this, eventQueue, client, seedGoal);
 	}
 	
 	

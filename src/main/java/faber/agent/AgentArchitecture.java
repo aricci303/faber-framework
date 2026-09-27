@@ -6,13 +6,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import org.json.JSONObject;
-
 import com.anthropic.models.messages.Model;
-
 import faber.agent.LlmClient.LlmCallResult;
-import faber.agent.PlanResult.ActionInfo;
 import faber.agent.formal.Coherence;
 import faber.agent.formal.CoreTuple;
 import faber.agent.formal.TupleExtractor;
@@ -20,14 +16,27 @@ import faber.agent.formal.WellFormedness;
 import faber.agent.stages.StageProfile;
 import faber.environment.Artifact;
 import faber.environment.Workspace;
+import faber.environment.WorkspaceArtifact;
+import faber.environment.UserConsoleArtifact;
+import faber.environment.AlarmArtifact;
+import faber.environment.NotebookArtifact;
+import faber.environment.Manual;
 
 public class AgentArchitecture {
 
 	final static private long PERCEPT_TIMEOUT = 30_000;
 
-	/** The one goal every other goal can trace back to as an ancestor — see init(). */
-	public final static String STANDING_GOAL_ID = "serve-user";
-	
+	// The four artifacts every agent is always spawned with — their manuals now live once in the
+	// system prompt (see SystemPrompt's own appended manuals) rather than being repeated in
+	// getWorkspaceContextBlock() every cycle. Sourced from each artifact's own .type field, the
+	// same one used to register it in Workspace.initDefaultArtifacts() and the same one
+	// SystemPrompt appends the manual for — one definition of "what these four are," not a second,
+	// separately-maintained list that could drift from it.
+	private static final Set<String> STANDARD_TYPES = Set.of(
+			WorkspaceArtifact.type, UserConsoleArtifact.type, AlarmArtifact.type, NotebookArtifact.type);
+
+	private final SeedGoal seedGoal;
+
 	private Agent agent;
 
 	private EventQueue eventQueue;
@@ -81,14 +90,15 @@ public class AgentArchitecture {
 	}
 
 	
-	public AgentArchitecture(Agent agent, EventQueue eventQueue, LlmClient llmClient) {
+	public AgentArchitecture(Agent agent, EventQueue eventQueue, LlmClient llmClient, SeedGoal seedGoal) {
 		this.eventQueue = eventQueue;
 		this.agent = agent;
 		llm = llmClient;
+		this.seedGoal = seedGoal;
 	}
 
-	public AgentArchitecture(Agent agent, EventQueue eventQueue) {
-		this(agent, eventQueue, new LlmClient.AnthropicLlmClient(Model.CLAUDE_SONNET_5));
+	public AgentArchitecture(Agent agent, EventQueue eventQueue, SeedGoal seedGoal) {
+		this(agent, eventQueue, new LlmClient.AnthropicLlmClient(Model.CLAUDE_SONNET_5), seedGoal);
 	}
 
 	void init(Workspace workspace) {
@@ -105,23 +115,31 @@ public class AgentArchitecture {
 		// Registered directly by the harness, not via a model-authored <intention_changes> entry —
 		// this goal exists from cycle one, before any model output has happened at all, which is
 		// exactly the case the wire protocol has no way to represent on its own. Every goal the model
-		// itself introduces can cite this as parent_goal_id, giving even a purely reactive moment
-		// (observing user-console-01 by default, with nothing else pending) a real, registered goal
-		// to be MEANS_END relative to, rather than defaulting to REACTIVE for lack of anywhere to
-		// attach. See the "Goal hierarchy" section of the system prompt for what this changes for
-		// the model, and why REACTIVE still exists as a genuine possibility, not a removed one.
+		// itself introduces can cite this as parent_goal_id, giving even an idle moment (observing
+		// user-console-01 by default, with nothing else pending, in the assistant case — or the
+		// equivalent idle moment for whatever this agent was actually seeded with) a real, registered
+		// goal to be goal-directed relative to, rather than defaulting to REACTIVE for lack of
+		// anywhere to attach. See the "Goal hierarchy" section of the system prompt for what this
+		// changes for the model — REACTIVE is no longer a tolerated possibility at all now (WF8):
+		// given a goal always exists to attach to, its occurrence is always a missed citation, not a
+		// genuine category of action. This is general, not assistant-specific: an agent is never
+		// spawned without a goal at all — which one is exactly what SeedGoal parameterizes.
+		//
+		// kind and plan are always passed null here, deliberately — SeedGoal carries only goalId and
+		// description now, on purpose (see SeedGoal's own doc): both are left entirely for the
+		// model's own first cycle to supply, the same ordinary way it would for any goal it
+		// introduces itself. kindOf() renders an unset kind as TO_BE_DECIDED, honestly, rather than
+		// a silently-plausible default; a null plan renders honestly as absent the same way, per
+		// GoalLedger/IntentionLedger's own null-handling, already confirmed safe for exactly this.
 		//
 		// Registering only the goal (GoalLedger) and not also an intention (IntentionLedger) would
 		// leave it invisible in ONGOING INTENTIONS — that rendering reads activeIntentions(), which
-		// has no entry for a goal that was never given a plan. A registered-but-invisible standing
-		// goal is worse than not having one at all: the model would have to take the system prompt's
-		// word for its existence, cycle after cycle, with nothing in its own context ever confirming
-		// it. Both ledgers are seeded together here for exactly that reason.
-		goalLedger.registerOrUpdate(STANDING_GOAL_ID,
-				"Serve the user's requests as they arise, remaining available and responsive by default.");
-		intentionLedger.registerOrUpdate(STANDING_GOAL_ID,
-				"Observe user-console-01 by default and respond to whatever the user asks as it arrives. "
-				+ "Every specific request becomes its own subgoal, in service of this one.");
+		// has no entry for a goal that was never given a plan. A registered-but-invisible seed goal
+		// is worse than not having one at all: the model would have to take the system prompt's word
+		// for its existence, cycle after cycle, with nothing in its own context ever confirming it.
+		// Both ledgers are seeded together here for exactly that reason.
+		goalLedger.registerOrUpdate(seedGoal.goalId(), seedGoal.description(), null, null);
+		intentionLedger.registerOrUpdate(seedGoal.goalId(), null);
 
 		tupleTrace = new ArrayList<>();
 		correlationCounter = new AtomicInteger(0);
@@ -355,7 +373,7 @@ public class AgentArchitecture {
 		Set<String> groundedSource = new LinkedHashSet<>();
 		for (Percept p : currentPercepts)
 			groundedSource.add(p.toContextLine());
-		currentWF = WellFormedness.check(currentCoreTuple, groundedSource, goalLedger);
+		currentWF = WellFormedness.check(currentCoreTuple, groundedSource, goalLedger, intentionLedger);
 	}
 	
 	private void checkCoherence() {
@@ -397,6 +415,7 @@ public class AgentArchitecture {
 			if (description != null) sb.append("\n - goal_description: ").append(description);
 			String parentGoalId = goalLedger.parentOf(i.goalId);
 			if (parentGoalId != null) sb.append("\n - in service of: ").append(parentGoalId);
+			sb.append("\n - kind: ").append(goalLedger.kindOf(i.goalId).toJsonValue());
 			if (i.plan != null) sb.append("\n - plan: ").append(i.plan);
 
 			if (i.trigger != null) {
@@ -408,7 +427,25 @@ public class AgentArchitecture {
 			}
 			sb.append('\n');
 		}
-		return sb.length() == 0 ? "(none)" : sb.toString().stripTrailing();
+		String active = sb.length() == 0 ? "(none)" : sb.toString().stripTrailing();
+
+		// Already-resolved goals, compact and separate from the active list above — the harness-
+		// guaranteed answer to "was this goal already closed out," so a goal's absence above is
+		// never the only signal available for that question. See IntentionLedger.resolvedIntentions
+		// for the real, recurring confusion (a resolved goal re-registered a cycle or two later, as
+		// though it had never existed) this exists to prevent. Shown in full, unbounded, the same
+		// choice this project has made elsewhere (manuals, workspace state) when correctness came
+		// first and cost at scale was left as a documented, not-yet-stress-tested open question
+		// rather than a reason to withhold a harness-guaranteed fact.
+		StringBuilder resolved = new StringBuilder();
+		for (Intention i : intentionLedger.resolvedIntentions()) {
+			if (resolved.length() > 0) resolved.append(", ");
+			resolved.append(i.goalId).append(" (").append(i.status.toJsonValue()).append(")");
+		}
+		if (resolved.length() > 0) {
+			active += "\n\nAlready resolved this session (not active, never re-register these): " + resolved;
+		}
+		return active;
 	}
 
 	private String getFullStateOfMind() {
@@ -424,6 +461,12 @@ public class AgentArchitecture {
 
 	public List<CoreTuple> trace() {
 		return tupleTrace;
+	}
+
+	/** The id of the goal this agent was actually spawned with — "serve-user" for the assistant
+	 *  default, whatever SeedGoal.goalId() was supplied otherwise. */
+	public String seedGoalId() {
+		return seedGoal.goalId();
 	}
 
 
@@ -482,6 +525,9 @@ public class AgentArchitecture {
 				}
 				if (g.parentGoalId != null) {
 					sb.append("\n - parent_goal_id: " + g.parentGoalId);
+				}
+				if (g.goalKind != null) {
+					sb.append("\n - goal_kind: " + g.goalKind.toJsonValue());
 				}
 				if (g.plan != null) {
 					sb.append("\n - plan: " + g.plan);
@@ -650,7 +696,14 @@ public class AgentArchitecture {
 			sb.append("  (none)\n");
 		} else {
 			for (var ar : availableArtifacts) {
-				sb.append("  - id: \"").append(ar.id()).append("\", type: \"").append(ar.type()).append("\"\n");
+				sb.append("  - id: \"").append(ar.id()).append("\", type: \"").append(ar.type()).append("\"");
+				// The four standard types' own function is already fully known from the system
+				// prompt's own manuals — repeating it here would be noise, not new information.
+				if (!STANDARD_TYPES.contains(ar.type())) {
+					Manual m = workspace.manualFor(ar.type());
+					if (m != null) sb.append(", function: \"").append(m.function).append("\"");
+				}
+				sb.append("\n");
 			}
 		}
 		sb.append("observed artifacts:\n");
@@ -665,10 +718,27 @@ public class AgentArchitecture {
 			}
 		}
 
-		sb.append("manuals:\n");
-		for (var ar : availableArtifacts) {
-			sb.append(workspace.manualFor(ar.type()).toJson()).append("\n");
+		// Every creatable type this workspace knows about, whether an instance exists yet or not —
+		// this is how an agent discovers "I could make one of these" for a type it has never seen
+		// instantiated. The four standard types are never creatable by the agent (registered with a
+		// null factory), so isCreatable() alone already excludes them without a separate check.
+		sb.append("available types (creatable via workspace-01's create_artifact):\n");
+		var creatableTypes = new ArrayList<Manual>();
+		for (Manual m : workspace.allManuals()) if (m.isCreatable()) creatableTypes.add(m);
+		if (creatableTypes.isEmpty()) {
+			sb.append("  (none)\n");
+		} else {
+			for (Manual m : creatableTypes) {
+				sb.append("  - type: \"").append(m.artifactType).append("\", function: \"")
+						.append(m.function).append("\"\n");
+			}
 		}
+
+		// Full manuals for non-standard types are no longer given here automatically — the two
+		// listings above (each type's one-line function) are meant to be enough to judge relevance;
+		// fetch the rest via workspace-01's get_manual operation only for a type you actually intend
+		// to use (see the system prompt's own discussion of this and of notebook-01 as the place to
+		// keep what's worth keeping).
 
 		return sb.toString();
 	}

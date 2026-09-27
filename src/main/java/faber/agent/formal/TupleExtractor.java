@@ -7,6 +7,7 @@ import java.util.Set;
 import faber.agent.Percept;
 import faber.agent.PlanResult;
 import faber.agent.GoalLedger;
+import faber.agent.GoalKind;
 import faber.agent.IntentionLedger;
 
 /**
@@ -41,7 +42,7 @@ public interface TupleExtractor {
             // caller, from the same entry — neither ledger knows about the other on its own.
             for (PlanResult.IntentionEntry g : planResult.getIntentionChanges()) {
                 if (g.goalId == null) continue;
-                goalLedger.registerOrUpdate(g.goalId, g.goalDescription, g.parentGoalId);
+                goalLedger.registerOrUpdate(g.goalId, g.goalDescription, g.parentGoalId, g.goalKind);
                 intentionLedger.registerOrUpdate(g.goalId, g.plan);
                 intentionLedger.registerTrigger(g.goalId, g.trigger);
                 intentionLedger.resolveGoal(g.goalId, g.status);
@@ -49,7 +50,23 @@ public interface TupleExtractor {
 
             var goalId = planResult.getActInfo().goalId();
             String G = goalId != null ? goalId : CoreTuple.BOTTOM;
-            Relation r = goalId != null ? Relation.MEANS_END : Relation.REACTIVE;
+            // The registration loop above runs first, so a goal introduced this very cycle already
+            // has its kind on record by the time this lookup happens — no ordering gap. Relation
+            // still needs a concrete value even when a cited goal's own kind is TO_BE_DECIDED (never
+            // classified) — MAINTENANCE only when genuinely declared MAINTENANCE, ACHIEVEMENT
+            // otherwise, the same fallback used before TO_BE_DECIDED existed. The difference is that
+            // this fallback is no longer silent: WellFormedness's WF7 checks this exact case —
+            // whether the goal actually cited this cycle was genuinely classified or is riding this
+            // fallback — and flags it when it isn't, rather than letting an unclassified goal's
+            // citation look identical to a deliberately-achievement one.
+            Relation r = goalId != null
+                    ? (goalLedger.kindOf(goalId) == GoalKind.MAINTENANCE
+                            ? Relation.MAINTENANCE : Relation.ACHIEVEMENT)
+                    // Relation.REACTIVE here means goalId itself was null — the model cited no goal
+                    // at all. Computed the same way it always was, but no longer a silent, tolerated
+                    // outcome: WellFormedness's WF8 flags this every time it happens now, the same
+                    // way WF7 flags an unclassified kind riding the ACHIEVEMENT fallback above.
+                    : Relation.REACTIVE;
 
             
             var content = planResult.getActInfo().content();

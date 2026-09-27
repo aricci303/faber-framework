@@ -1,6 +1,7 @@
 package scenarios;
 
 import faber.agent.Agent;
+import faber.agent.SeedGoal;
 import faber.environment.Workspace;
 
 /**
@@ -36,7 +37,8 @@ public final class Scenario06Main {
         FlightBookingArtifact flights = new FlightBookingArtifact("flight-01", workspace);
         workspace.provision("flight-01", "FlightBooking", flights);
 
-        Agent agent = new Agent("agent-0");
+        Agent agent = new Agent("agent-0", new SeedGoal("serve-user",
+                "Serve the user's requests as they arise, remaining available and responsive by default."));
         // agent.enableCycleDumpLogging(false);
         agent.init(workspace);
 
