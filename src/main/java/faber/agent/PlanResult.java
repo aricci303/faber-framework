@@ -10,13 +10,28 @@ import org.json.JSONObject;
  * The parsed result of one Plan (micro-loop) run: three top-level
  * blocks — <state_of_mind> (free narrative), <intention_changes> (a
  * structured, homogeneous array — every intention newly adopted or
- * revised this cycle, whether or not it's the one driving this
- * cycle's action), and <action> (kind, parameters, and a bare goal_id
- * string referencing one of the agent's own goals — the model can
- * still leave it absent at the parsing level, but "no intention, no
- * action" now holds without exception: an absent goal_id is always a
- * missed citation the moment it happens, not a legitimate reactive
- * action with nothing behind it; see WellFormedness's WF8).
+ * revised this cycle, whether or not it's the one driving any of this
+ * cycle's actions), and <actions> — a JSON array, one entry per action
+ * this cycle commits to (length 1 for an ordinary single-action turn;
+ * greater than 1 only when the model has deliberately batched several
+ * genuinely independent actions — see SystemPrompt's own guidance on
+ * when that's safe to do). Each entry has the same shape a single
+ * action always did: kind, parameters, and a bare goal_id string
+ * referencing one of the agent's own goals — the model can still
+ * leave it absent at the parsing level, but "no intention, no action"
+ * now holds without exception: an absent goal_id is always a missed
+ * citation the moment it happens, not a legitimate reactive action
+ * with nothing behind it; see WellFormedness's WF8.
+ *
+ * Two invariants are enforced here, at parse time, the same way
+ * malformed JSON already is — feeding back into the existing
+ * retry-with-feedback loop rather than either silently tolerating or
+ * crashing on either: WAIT can never appear alongside another action
+ * in the same batch (it is a decision to do nothing this cycle, which
+ * cannot coexist with also doing something), and FOCUS/STOP_OBSERVING
+ * may not target the same artifact twice within one batch (the second
+ * would only ever contradict or duplicate the first, never add
+ * anything a single action couldn't already say).
  *
  * Aligned with Bratman's practical-reasoning vocabulary, and BDI more
  * generally: a goal is the state of affairs being pursued — the WHAT,
@@ -32,7 +47,7 @@ import org.json.JSONObject;
  * record of what was asked for, and never the reverse.
  *
  * <intention_changes> is required every cycle, even as an empty array,
- * the same reasoning as <state_of_mind> and <action> already being
+ * the same reasoning as <state_of_mind> and <actions> already being
  * mandatory — a model with nothing new to adopt or revise says so
  * explicitly, rather than the harness having to guess whether omission
  * means "nothing new" or "forgot."
@@ -151,12 +166,13 @@ public final class PlanResult {
 
     private final String stateOfMind;
     private final java.util.List<IntentionEntry> intentionChanges;
-    private final ActionInfo actInfo;
-    
-    private PlanResult(String stateOfMind, java.util.List<IntentionEntry> intentionChanges, ActionInfo actInfo) {
+    private final java.util.List<ActionInfo> actions;
+
+    private PlanResult(String stateOfMind, java.util.List<IntentionEntry> intentionChanges,
+                        java.util.List<ActionInfo> actions) {
         this.stateOfMind = stateOfMind;
         this.intentionChanges = intentionChanges;
-        this.actInfo = actInfo;
+        this.actions = actions;
     }
 
     // Anchored to the start of a line (optionally after leading whitespace), not just any
@@ -174,14 +190,14 @@ public final class PlanResult {
             "^\\s*<state_of_mind>(.*?)</state_of_mind>", Pattern.DOTALL | Pattern.MULTILINE);
     private static final Pattern INTENTION_CHANGES = Pattern.compile(
             "^\\s*<intention_changes>(.*?)</intention_changes>", Pattern.DOTALL | Pattern.MULTILINE);
-    private static final Pattern ACT = Pattern.compile(
-            "^\\s*<action>(.*?)</action>", Pattern.DOTALL | Pattern.MULTILINE);
+    private static final Pattern ACTIONS = Pattern.compile(
+            "^\\s*<actions>(.*?)</actions>", Pattern.DOTALL | Pattern.MULTILINE);
 
     public static PlanResult parse(String rawModelOutput) {
     	var som = parseStateOfMindBlock(rawModelOutput);
         var intentionChanges = parseIntentionChangesBlock(rawModelOutput);
-        var actionInfo = parseActionBlock(rawModelOutput);
-        return new PlanResult(som, intentionChanges, actionInfo);
+        var actions = parseActionsBlock(rawModelOutput);
+        return new PlanResult(som, intentionChanges, actions);
     }
 
     private static String parseStateOfMindBlock(String rawModelOutput){
@@ -192,27 +208,63 @@ public final class PlanResult {
         return somMatcher.group(1).trim();
     }
     
-    private static ActionInfo parseActionBlock(String rawModelOutput){
-        Matcher actMatcher = ACT.matcher(rawModelOutput);
-        if (!actMatcher.find()) {
-            throw new IllegalStateException("Model output missing the action section.");
+    private static java.util.List<ActionInfo> parseActionsBlock(String rawModelOutput){
+        Matcher actionsMatcher = ACTIONS.matcher(rawModelOutput);
+        if (!actionsMatcher.find()) {
+            throw new IllegalStateException("Model output missing the actions section.");
         }
-        JSONObject parsed;
-        String act = actMatcher.group(1).trim();
+        String actionsText = actionsMatcher.group(1).trim();
+        JSONArray actionsArr;
         try {
-            parsed = new JSONObject(act);
+            actionsArr = new JSONArray(actionsText);
         } catch (Exception ex) {
-            throw new IllegalStateException("Model output's action section is malformed (not a valid JSON object)");
+            throw new IllegalStateException("Model output's actions section is malformed (not a valid JSON array): " + actionsText);
+        }
+        if (actionsArr.length() == 0) {
+            throw new IllegalStateException("Model output's actions array is empty — every cycle commits to at least one action.");
         }
 
-        Object kindRaw = parsed.get("kind");
-        if (kindRaw == null) {
-            throw new IllegalStateException("Action JSON missing required \"kind\" field: " + parsed);
+        java.util.List<ActionInfo> actions = new java.util.ArrayList<>();
+        for (int i = 0; i < actionsArr.length(); i++) {
+            JSONObject parsed;
+            try {
+                parsed = actionsArr.getJSONObject(i);
+            } catch (Exception ex) {
+                throw new IllegalStateException("Actions array entry " + i + " is not a JSON object: " + actionsArr);
+            }
+            Object kindRaw = parsed.get("kind");
+            if (kindRaw == null) {
+                throw new IllegalStateException("Action JSON missing required \"kind\" field: " + parsed);
+            }
+            ActionKind kind = ActionKind.valueOf(kindRaw.toString());
+            String actionGoalId = parsed.has("goal_id") ? parsed.getString("goal_id") : null;
+            actions.add(new ActionInfo(kind, actionGoalId, parsed));
         }
-        ActionKind kind = ActionKind.valueOf(kindRaw.toString());
-        String actionGoalId = parsed.has("goal_id") ? parsed.getString("goal_id") : null;
-        return  new ActionInfo(kind, actionGoalId, parsed);
-    	
+
+        // Invariant 1: WAIT is a decision to do nothing this cycle — it cannot coexist with also
+        // doing something else, so a batch containing it must contain nothing else.
+        boolean anyWait = actions.stream().anyMatch(a -> a.kind() == ActionKind.WAIT);
+        if (anyWait && actions.size() > 1) {
+            throw new IllegalStateException("WAIT cannot be batched alongside other actions in the same "
+                    + "actions array — it is a decision to do nothing this cycle, which cannot coexist with "
+                    + "also committing to something else. Either commit to WAIT alone, or drop it and commit "
+                    + "only to the other action(s).");
+        }
+
+        // Invariant 2: FOCUS/STOP_OBSERVING targeting the same artifact twice within one batch can
+        // only ever contradict or duplicate each other, never add anything a single action couldn't.
+        java.util.Set<String> focusOrStopTargets = new java.util.HashSet<>();
+        for (ActionInfo a : actions) {
+            if (a.kind() == ActionKind.FOCUS || a.kind() == ActionKind.STOP_OBSERVING) {
+                String targetId = a.content().has("artifact_id") ? a.content().getString("artifact_id") : null;
+                if (targetId != null && !focusOrStopTargets.add(targetId)) {
+                    throw new IllegalStateException("FOCUS/STOP_OBSERVING both target artifact '" + targetId
+                            + "' within the same actions array — decide once, per artifact, per batch.");
+                }
+            }
+        }
+
+        return actions;
     }
 
     private static java.util.List<IntentionEntry> parseIntentionChangesBlock(String rawModelOutput){
@@ -242,8 +294,8 @@ public final class PlanResult {
     	return intentionChanges;
     }
     
-    public ActionInfo getActInfo() {
-    	return this.actInfo;
+    public java.util.List<ActionInfo> getActions() {
+    	return this.actions;
     }
     
 }

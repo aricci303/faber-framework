@@ -63,6 +63,12 @@ public class Agent {
 	public int resolvedGoalsCount() {
 		return agentArch.resolvedGoalsCount();
 	}
+
+	/** The full last-cycle result, including one tuple/WF/Coherence entry per action the cycle
+	 *  batched — see AgentArchitecture.CycleResult's own fields. */
+	public AgentArchitecture.CycleResult getLastCycleResult() {
+		return agentArch.getLastCycleResult();
+	}
 	
     public void addObservedArtifact(Artifact artifact) {
     	observedArtifacts.add(artifact);
@@ -114,9 +120,13 @@ public class Agent {
 	                    + ", output: " + totalOutputTokens
 	                    + " (input total includes cache creation + cache read, comparable to the Claude console's own reporting)");
 	            System.out.println("*** VALIDATION ***");
-	            System.out.println("[tuple] " + cycleResult.coreTuple());
-	            System.out.println("[WF] pass=" + cycleResult.wf().pass + " " + cycleResult.wf().violations);
-	            System.out.println("[Coherence] pass=" + cycleResult.coherence().pass + " " + cycleResult.coherence().notes);
+	            int actionCount = cycleResult.coreTuples().size();
+	            for (int a = 0; a < actionCount; a++) {
+	                String prefix = actionCount > 1 ? "[action " + (a + 1) + "/" + actionCount + "] " : "";
+	                System.out.println(prefix + "[tuple] " + cycleResult.coreTuples().get(a));
+	                System.out.println(prefix + "[WF] pass=" + cycleResult.wfs().get(a).pass + " " + cycleResult.wfs().get(a).violations);
+	                System.out.println(prefix + "[Coherence] pass=" + cycleResult.coherences().get(a).pass + " " + cycleResult.coherences().get(a).notes);
+	            }
          	}
 		}
 		

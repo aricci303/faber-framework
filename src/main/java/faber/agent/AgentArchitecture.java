@@ -63,10 +63,12 @@ public class AgentArchitecture {
 	
 
 	private CoreTuple previousTuple;
-	private CoreTuple currentCoreTuple;
-	private WellFormedness.Result currentWF;
-	private Coherence.Result currentCoherence;
-	private boolean currentGoalWasAlreadySatisfiedBeforeThisCycle;
+	// One entry per action this cycle committed to (length 1 for an ordinary single-action cycle) —
+	// see PlanResult's and TupleExtractor's own doc comments for why a cycle is no longer
+	// necessarily one tuple.
+	private List<CoreTuple> currentCoreTuples;
+	private List<WellFormedness.Result> currentWFs;
+	private List<Coherence.Result> currentCoherences;
     
 	/* LLM related */
 	private String currentContext;
@@ -91,9 +93,9 @@ public class AgentArchitecture {
 			String stateOfMind,
 			PlanResult planResult, 
 			ActResult actResult,
-			CoreTuple coreTuple, 
-			WellFormedness.Result wf,
-			Coherence.Result coherence,
+			List<CoreTuple> coreTuples,
+			List<WellFormedness.Result> wfs,
+			List<Coherence.Result> coherences,
 			LlmCallResult llmCallResult) {
 	}
 
@@ -235,65 +237,72 @@ public class AgentArchitecture {
 		
 	private void act() {
 		boolean committedToWait = false;
-		String act = ""; 
-		var actTodo = currentPlanResult.getActInfo();
-		JSONObject content = actTodo.content();
-		
-		switch (actTodo.kind()) {
-		case WAIT:
-			committedToWait = true;
-			act = "wait";
-			break;
+		java.util.List<String> actDescriptions = new java.util.ArrayList<>();
 
-		case INVOKE: {
-			committedToWait = false;
-			String artifactId = content.getString("artifact_id");
-			String operation = content.getString("operation_name");
-			JSONObject args = content.getJSONObject("parameters");
-			Artifact target = workspace.instanceOf(artifactId);
-			if (target == null) {
-				// Refused outright — no operation_started, per the system prompt's rule that a
-				// request refused before ever starting fails without one.
-				eventQueue.publish(Percept.operationFailed(newCorrelationId(), "no such artifact: " + artifactId));
+		// Dispatched in sequence — since Java itself is single-threaded — but never waiting between
+		// them: each dispatch here was already fire-and-forget before batching existed (INVOKE
+		// publishes operation_started synchronously then returns immediately; its own completion
+		// arrives later, as its own percept, exactly as for a single action). Batching several
+		// independent actions in one cycle changes nothing about how any one of them is dispatched,
+		// only how many get dispatched before the cycle's own bookkeeping (doChecks) runs.
+		for (var actTodo : currentPlanResult.getActions()) {
+			JSONObject content = actTodo.content();
+
+			switch (actTodo.kind()) {
+			case WAIT:
+				// Parse-time invariant (PlanResult) guarantees WAIT is never batched with anything
+				// else, so this branch is always the sole action in the loop.
+				committedToWait = true;
+				actDescriptions.add("wait");
+				break;
+
+			case INVOKE: {
+				String artifactId = content.getString("artifact_id");
+				String operation = content.getString("operation_name");
+				JSONObject args = content.getJSONObject("parameters");
+				Artifact target = workspace.instanceOf(artifactId);
+				if (target == null) {
+					// Refused outright — no operation_started, per the system prompt's rule that a
+					// request refused before ever starting fails without one.
+					eventQueue.publish(Percept.operationFailed(newCorrelationId(), "no such artifact: " + artifactId));
+					break;
+				}
+				String correlationId = newCorrelationId();
+				mechanicalLog.recordInvocation(correlationId, artifactId, operation);
+				target.invoke(agent, operation, args, correlationId); // publishes operation_started itself, synchronously
+				actDescriptions.add("invoke " + artifactId + "." + operation + "(" + args + ")");
 				break;
 			}
-			String correlationId = newCorrelationId();
-			mechanicalLog.recordInvocation(correlationId, artifactId, operation);
-			target.invoke(agent, operation, args, correlationId); // publishes operation_started itself, synchronously
-			act = "invoke " + artifactId + "." + operation + "(" + args + ")";
-			break;
-		}
 
-		case FOCUS: {
-			committedToWait = false;
-			String artifactId = content.getString("artifact_id");
-			try {
-				workspace.startObserving(agent, artifactId);
-				act = "focus " + artifactId;
-			} catch (IllegalArgumentException e) {
-				// Pre-existing gap this change would otherwise have walked straight into:
-				// refusing
-				// STOP_OBSERVING on an always-observed artifact needs this same handling, so
-				// FOCUS
-				// gets it too now rather than being allowed to crash the loop on a bad id.
-				act = "focus " + artifactId + " refused - reason: " + e.getMessage();
+			case FOCUS: {
+				String artifactId = content.getString("artifact_id");
+				try {
+					workspace.startObserving(agent, artifactId);
+					actDescriptions.add("focus " + artifactId);
+				} catch (IllegalArgumentException e) {
+					// Pre-existing gap this change would otherwise have walked straight into:
+					// refusing
+					// STOP_OBSERVING on an always-observed artifact needs this same handling, so
+					// FOCUS
+					// gets it too now rather than being allowed to crash the loop on a bad id.
+					actDescriptions.add("focus " + artifactId + " refused - reason: " + e.getMessage());
+				}
+				break;
 			}
-			break;
-		}
 
-		case STOP_OBSERVING: {
-			committedToWait = false;
-			String artifactId = content.getString("artifact_id");
-			try {
-				workspace.stopObserving(agent, artifactId);
-				act = "stop_observing " + artifactId;
-			} catch (IllegalArgumentException e) {
-				act = "stop_observing" + artifactId + " refused";
+			case STOP_OBSERVING: {
+				String artifactId = content.getString("artifact_id");
+				try {
+					workspace.stopObserving(agent, artifactId);
+					actDescriptions.add("stop_observing " + artifactId);
+				} catch (IllegalArgumentException e) {
+					actDescriptions.add("stop_observing" + artifactId + " refused");
+				}
+				break;
 			}
-			break;
+			}
 		}
-		}
-		currentActResult = new ActResult(act, committedToWait);	
+		currentActResult = new ActResult(String.join("\n", actDescriptions), committedToWait);	
 	}
 	
 	
@@ -311,18 +320,22 @@ public class AgentArchitecture {
 		checkTriggerFidelity();
 
 		// Same reasoning applies to C3 (Coherence): "already satisfied" has to mean satisfied as of
-		// BEFORE this cycle's own action, not after — the common, correct pattern of a single cycle
-		// both delivering a goal's result and marking it achieved in the same <intention_changes> entry
-		// must not be judged as targeting an already-satisfied goal. The action's own cited goal id is
-		// available directly from currentPlanResult, with no dependency on extract() having run yet.
-		String actionGoalId = currentPlanResult.getActInfo().goalId();
-		GoalStatus priorStatus = actionGoalId != null ? intentionLedger.statusOf(actionGoalId) : null;
-		currentGoalWasAlreadySatisfiedBeforeThisCycle =
-				priorStatus == GoalStatus.ACHIEVED || priorStatus == GoalStatus.DROPPED;
+		// BEFORE this cycle's own action(s), not after — the common, correct pattern of a cycle both
+		// delivering a goal's result and marking it achieved in the same <intention_changes> entry
+		// must not be judged as targeting an already-satisfied goal. Captured once per action here,
+		// in the same order actions/tuples are built in, before extract() below mutates the ledger —
+		// each action may cite a different goal, so this can't be a single, cycle-wide flag anymore.
+		java.util.List<Boolean> wasAlreadySatisfiedBeforeThisCycle = new java.util.ArrayList<>();
+		for (var actTodo : currentPlanResult.getActions()) {
+			String actionGoalId = actTodo.goalId();
+			GoalStatus priorStatus = actionGoalId != null ? intentionLedger.statusOf(actionGoalId) : null;
+			wasAlreadySatisfiedBeforeThisCycle.add(
+					priorStatus == GoalStatus.ACHIEVED || priorStatus == GoalStatus.DROPPED);
+		}
 
-		currentCoreTuple = extractor.extract(currentPercepts, currentPlanResult, goalLedger, intentionLedger);
+		currentCoreTuples = extractor.extract(currentPercepts, currentPlanResult, goalLedger, intentionLedger);
 		checkWellformedness();
-		checkCoherence();		
+		checkCoherence(wasAlreadySatisfiedBeforeThisCycle);
 	}
 	
 	
@@ -336,6 +349,12 @@ public class AgentArchitecture {
 	 * have a legitimate reason to defer or reconsider (Bratman: intentions are
 	 * revisable, just not silently so), and adjudicating that is left to a
 	 * human/audit process, not enforced online.
+	 *
+	 * "Addressed by action" now checks whether ANY of this cycle's (possibly
+	 * several, batched) actions cites the trigger's goal id — a batch resolving
+	 * several distinct pending triggers at once is exactly the kind of outcome
+	 * this mechanism exists to recognize as legitimate, not something to flag
+	 * just because it wasn't the cycle's only action.
 	 *
 	 * "Addressed" also recognizes a second, independent path, found necessary
 	 * from a real run: this method runs before the same cycle's <intention_changes> array is
@@ -356,7 +375,8 @@ public class AgentArchitecture {
 			if (!satisfied)
 				continue;
 
-			boolean addressedByAction = trigger.goalId.equals(currentPlanResult.getActInfo().goalId());
+			boolean addressedByAction = currentPlanResult.getActions().stream()
+					.anyMatch(a -> trigger.goalId.equals(a.goalId()));
 			boolean addressedByResolution = resolvedInIntentionChangesThisCycle(trigger.goalId, currentPlanResult.getIntentionChanges());
 			boolean addressed = addressedByAction || addressedByResolution;
 			if (addressed) {
@@ -374,32 +394,57 @@ public class AgentArchitecture {
 	
 	
 	private void checkWellformedness() {
-		if (!stageProfile.relationAllowed(currentCoreTuple.r)) {
-			throw new IllegalStateException("Relation " + currentCoreTuple.r + " used but its layer isn't active "
-					+ "in this StageProfile — a layer leaking in without being declared.");
-		}
+		currentWFs = new java.util.ArrayList<>();
 		Set<String> groundedSource = new LinkedHashSet<>();
 		for (Percept p : currentPercepts)
 			groundedSource.add(p.toContextLine());
-		currentWF = WellFormedness.check(currentCoreTuple, groundedSource, goalLedger, intentionLedger);
+		for (CoreTuple tuple : currentCoreTuples) {
+			if (!stageProfile.relationAllowed(tuple.r)) {
+				throw new IllegalStateException("Relation " + tuple.r + " used but its layer isn't active "
+						+ "in this StageProfile — a layer leaking in without being declared.");
+			}
+			currentWFs.add(WellFormedness.check(tuple, groundedSource, goalLedger, intentionLedger));
+		}
 	}
 	
-	private void checkCoherence() {
-		// C1's keyword-overlap check wants whichever of goal description/plan the model actually
-		// supplied — an action's own justification typically cites specific plan detail (an
-		// operation, a date) at least as often as the more abstract goal, so both are combined
-		// rather than picking one.
-		String goalContent = currentCoreTuple.isReactive() ? null : combineGoalDescriptionAndPlan(
-				goalLedger.descriptionOf(currentCoreTuple.G), intentionLedger.planOf(currentCoreTuple.G));
-		currentCoherence = Coherence.check(currentCoreTuple, previousTuple, goalContent, currentGoalWasAlreadySatisfiedBeforeThisCycle);
-		previousTuple = currentCoreTuple;
-		tupleTrace.add(currentCoreTuple);		
+	private void checkCoherence(java.util.List<Boolean> wasAlreadySatisfiedBeforeThisCycle) {
+		currentCoherences = new java.util.ArrayList<>();
+		// C4's whole purpose is catching genuine stalling — repeating an action across DIFFERENT
+		// cycles with nothing new having arrived. Two sibling actions within the SAME batch, both
+		// reacting to the same perceived moment, are never that: they are two distinct, deliberate
+		// commitments made together, which is the entire point of batching. Every tuple in this
+		// batch is therefore compared against the same fixed reference — the last tuple of the
+		// PREVIOUS cycle — never against a sibling produced by this same cycle. Confirmed necessary
+		// by a real run: an earlier version of this method advanced previousTuple after each tuple
+		// within the batch, which meant two genuinely different, correctly-batched actions citing
+		// the same goal (sharing this cycle's own W, G, A, and r by construction) were compared
+		// against each other and flagged as a false C4 "identical tuple" violation.
+		CoreTuple referenceForThisCycle = previousTuple;
+		for (int i = 0; i < currentCoreTuples.size(); i++) {
+			CoreTuple tuple = currentCoreTuples.get(i);
+			// C1's keyword-overlap check wants whichever of goal description/plan the model actually
+			// supplied — an action's own justification typically cites specific plan detail (an
+			// operation, a date) at least as often as the more abstract goal, so both are combined
+			// rather than picking one.
+			String goalContent = tuple.isReactive() ? null : combineGoalDescriptionAndPlan(
+					goalLedger.descriptionOf(tuple.G), intentionLedger.planOf(tuple.G));
+			currentCoherences.add(Coherence.check(tuple, referenceForThisCycle, goalContent,
+					wasAlreadySatisfiedBeforeThisCycle.get(i)));
+			tupleTrace.add(tuple);
+		}
+		// Advances exactly once per cycle, after the whole batch — the next cycle's own tuples (or
+		// its own batch of several) are compared against the LAST action actually taken this cycle,
+		// the same "most recent real thing that happened" C4 always meant, whether that cycle
+		// committed to one action or several.
+		if (!currentCoreTuples.isEmpty()) {
+			previousTuple = currentCoreTuples.get(currentCoreTuples.size() - 1);
+		}
 	}
 	
 
 	
 	public CycleResult getLastCycleResult() {
-		return new CycleResult(nextCycleToRun, currentPercepts, this.getFullStateOfMind(), currentPlanResult, currentActResult,  currentCoreTuple, currentWF, currentCoherence, currentLLMCallResult);
+		return new CycleResult(nextCycleToRun, currentPercepts, this.getFullStateOfMind(), currentPlanResult, currentActResult,  currentCoreTuples, currentWFs, currentCoherences, currentLLMCallResult);
 	}
 
 	/**
