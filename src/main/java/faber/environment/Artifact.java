@@ -59,13 +59,32 @@ public abstract class Artifact {
     
     public String type() { return type; }
 
-    /** Non-blocking: publishes operation_started immediately, then schedules the operation and returns. */
+    /** Non-blocking: publishes operation_started immediately, then schedules the operation and returns.
+     *  Execution itself is serialized per artifact instance — the actual doOperation() call is
+     *  synchronized on this artifact, so only one operation body ever runs at a time for a given
+     *  instance, exactly matching A&A/CArtAgO's own artifact-as-monitor semantics. This was always
+     *  the right model conceptually — an artifact's internal state is its own, and two operations on
+     *  the same instance were never meant to interleave, whether the requestor is a single agent
+     *  batching several actions in one cycle or several distinct agents acting concurrently on a
+     *  shared coordination artifact. It became a real, reachable hazard rather than a theoretical one
+     *  the moment batching let a single cycle submit more than one action, since two operations on the
+     *  same instance can now genuinely be scheduled close enough together to land on separate worker
+     *  threads at once — confirmed by a real run producing a corrupted-state exception in
+     *  NotebookArtifact from exactly this. The fix belongs here, once, rather than as ad-hoc internal
+     *  locking repeated in every individual artifact that happens to get hit by it: any artifact whose
+     *  doOperation() touches its own mutable state gets the guarantee for free, uniformly. Operations
+     *  on two different artifact instances are completely unaffected — each instance has its own
+     *  monitor, so genuine parallelism across artifacts is preserved; this only ever serializes
+     *  concurrent attempts to execute against the very same instance. */
     public final void invoke(Agent requestor, String operationName, JSONObject params, String correlationId) {
         String signature = id + "." + operationName + "(" + params + ")";      
         requestor.notifyNewPercept(Percept.operationStarted(correlationId, signature));        
         workspace.scheduleOpExecution(() -> {
             try {
-                List<Object> outputs = doOperation(operationName, params);
+                List<Object> outputs;
+                synchronized (this) {
+                    outputs = doOperation(operationName, params);
+                }
                 requestor.notifyNewPercept(Percept.operationCompleted(correlationId, outputs));
             } catch (Exception e) {
             	requestor.notifyNewPercept(Percept.operationFailed(correlationId, e.getMessage()));

@@ -38,6 +38,10 @@ public final class NotebookArtifact extends Artifact {
 
 	public static final String type = "Notebook";
 
+    // Artifact.invoke() now guarantees doOperation() is never called concurrently for a given
+    // instance — every artifact is a monitor, matching real A&A/CArtAgO semantics — so a plain,
+    // unsynchronized map here is genuinely safe: no artifact-specific locking is needed, or should
+    // be added, since the guarantee already comes from the base class, uniformly, for every artifact.
     private final Map<String, String> notes = new LinkedHashMap<>();
 
     public NotebookArtifact(String id, Workspace workspace) {

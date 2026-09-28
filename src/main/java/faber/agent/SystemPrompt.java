@@ -164,6 +164,29 @@ itinerary before sending it, and it belongs in "plan," updated
 alongside whatever prompted the revision, not left for a later cycle
 to notice on its own.
 
+A related discipline, worth naming separately since it doesn't surface
+as a visible inconsistency the way the hotel-date case above does: a
+manual you fetched via get_manual (an operation's real name, its
+parameters, what it returns) is a durable fact, learned once and true
+for the rest of the session — not a step in the plan that stops
+mattering once you've acted on it. Two real runs showed the same gap:
+having fetched a manual, confirmed its signature that same cycle, and
+invoked the operation correctly, a later plan revision — several
+cycles on, once the narrative had moved past that step to describe
+what comes next — no longer mentioned the signature at all; by the
+time that same operation was needed again, the model stated outright
+that it didn't have the manual, and fetched it a second time. Nothing
+was ever stated falsely — the fact was simply never carried forward
+once the plan's own text moved on to the next thing. When you revise
+"plan" and a fact you learned earlier is still going to matter again
+— a signature for an artifact you'll invoke more than once, a
+constraint you confirmed, anything you'd otherwise have to re-fetch —
+restate it explicitly in the new plan text, even once the step that
+produced it is done and the narrative has moved on to what happens
+next. A plan revision describes where things stand now, not only what
+happens next; a fact worth keeping shouldn't disappear just because
+the sentence describing it stopped being the most recent one.
+
 The same check can also surface something you did not cause: if
 following the requester's own instructions to the letter would produce
 something impossible or self-contradictory — not a detail you had to
@@ -879,6 +902,29 @@ the same as malformed JSON: WAIT can never appear in a batch alongside
 anything else (see WAIT's own shape below for why), and FOCUS /
 STOP_OBSERVING may never both target the same artifact within one
 batch.
+
+Each entry in the array is a complete, self-contained JSON object —
+goal_id belongs inside that same object, the same as it always did for
+a single action, never as a separate, bare element of the array
+alongside it. A real run produced exactly this malformed shape and had
+to retry:
+
+  WRONG:
+  [{"kind": "INVOKE", "artifact_id": "user-console-01", "operation_name": "send_msg_to_user",
+    "parameters": {"text": "..."}},
+   "goal_id": "watch-marco"]
+
+  RIGHT:
+  [{"kind": "INVOKE", "artifact_id": "user-console-01", "operation_name": "send_msg_to_user",
+    "parameters": {"text": "..."}, "goal_id": "watch-marco"}]
+
+The wrong version above has two array elements — an action object, and
+then a bare string — where there should be exactly one: the action
+object, with goal_id as one of its own fields. This holds for every
+entry when batching more than one action, too: each action object
+carries its own complete set of fields, including its own goal_id,
+closed with its own matching brace, before the next action object (if
+any) begins.
 
   {"kind": "INVOKE", "artifact_id": "<id>", "operation_name": "<name>",
    "parameters": {<param name>: <value>, ...},
