@@ -216,16 +216,26 @@ public class AgentArchitecture {
 					}
 					System.out.println("[RETRY] cycle " + nextCycleToRun + ", attempt " + attempt
 							+ " produced malformed output (" + parseError.getMessage() + "). Retrying with feedback.");
+					// What was discarded would otherwise leave no trace: log why it stopped and what it looked like.
+					String discarded = lastCallResult.output() == null ? "" : lastCallResult.output();
+					System.out.println("[RETRY] diagnostics: stop_reason=" + lastCallResult.stopReason() + ", output_tokens=" + lastCallResult.numOutputTokens()
+							+ ", chars=" + discarded.length() + ". Discarded output starts: <<" + discarded.substring(0, Math.min(300, discarded.length())).replace("\n", "\\n")
+							+ ">> ... ends: <<" + discarded.substring(Math.max(0, discarded.length() - 200)).replace("\n", "\\n") + ">>");
+					String lengthNote = lastCallResult.truncated()
+							? " Your previous response was cut off at the output length limit — it was too long to finish. Be much more concise this time: "
+									+ "a shorter state of mind, and shorter plan texts. Do not enumerate every item; say only what changed or newly matters."
+							: "";
 					attemptContext = currentContext + "\n\n[NOTE: your previous response for this turn could not be "
 							+ "parsed and was entirely discarded — nothing from it was acted on or recorded, "
 							+ "so nothing is lost by trying again. The specific problem was: "
 							+ parseError.getMessage() + " Please produce a fresh, complete response in the "
 							+ "required three-part format — your reasoning, then your goals list, then your "
 							+ "action — double-checking that every JSON object and array you open is properly "
-							+ "closed before you finish.]";
+							+ "closed before you finish." + lengthNote + "]";
 				}
 			}
 		} catch (Exception ex) {
+			ex.printStackTrace();
 			throw new IllegalStateException("Model cannot be accessed " + ex.getMessage());
 		}
 
@@ -742,6 +752,9 @@ public class AgentArchitecture {
 	 */
 	private String getWorkspaceContextBlock() {
 		StringBuilder sb = new StringBuilder();
+		if (workspace.lifePhase() != null) {
+			sb.append("life phase: ").append(workspace.lifePhase().toJsonValue()).append("\n");
+		}
 		sb.append("available artifacts:\n");
 		var availableArtifacts = workspace.getIAvailableArtifacts();
 
@@ -756,6 +769,8 @@ public class AgentArchitecture {
 					Manual m = workspace.manualFor(ar.type());
 					if (m != null) sb.append(", function: \"").append(m.function).append("\"");
 				}
+				String purpose = workspace.purposeOf(ar.id());
+				if (purpose != null) sb.append(", purpose: \"").append(purpose).append("\"");
 				sb.append("\n");
 			}
 		}
@@ -798,6 +813,9 @@ public class AgentArchitecture {
 	
 	public String dumpLightWorkspaceContextBlock() {
 		StringBuilder sb = new StringBuilder();
+		if (workspace.lifePhase() != null) {
+			sb.append("life phase: ").append(workspace.lifePhase().toJsonValue()).append("\n");
+		}
 		sb.append("available artifacts:\n");
 		var availableArtifacts = workspace.getIAvailableArtifacts();
 
@@ -805,7 +823,10 @@ public class AgentArchitecture {
 			sb.append("  (none)\n");
 		} else {
 			for (var ar : availableArtifacts) {
-				sb.append("  - id: \"").append(ar.id()).append("\", type: \"").append(ar.type()).append("\"\n");
+				sb.append("  - id: \"").append(ar.id()).append("\", type: \"").append(ar.type()).append("\"");
+				String purpose = workspace.purposeOf(ar.id());
+				if (purpose != null) sb.append(", purpose: \"").append(purpose).append("\"");
+				sb.append("\n");
 			}
 		}
 		sb.append("observed artifacts:\n");

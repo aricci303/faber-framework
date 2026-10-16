@@ -30,6 +30,13 @@ public final class Workspace {
     private ExecutorService executor = Executors.newFixedThreadPool(2);
 
     private List<Agent> joinedAgents;
+
+    // Per-instance, agent-authored one-line statement of what an artifact is for and when to consult
+    // it — the instance-level counterpart of a type's own one-line function blurb. A type's manual
+    // cannot say what THIS store holds, so for artifacts the agent builds for its own memory the
+    // cue shown every cycle has to come from the instance, not the type.
+    private final Map<String, String> purposes = new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile LifePhase lifePhase = null;
     
     public Workspace() {
         joinedAgents = new ArrayList<Agent>();
@@ -89,6 +96,20 @@ public final class Workspace {
     }
 
 
+    public void setPurpose(String id, String purpose) {
+        if (purpose != null && !purpose.isBlank()) purposes.put(id, purpose.trim());
+    }
+    public String purposeOf(String id) { return purposes.get(id); }
+
+    public void setLifePhase(LifePhase phase) { this.lifePhase = phase; }
+    public LifePhase lifePhase() { return lifePhase; }
+
+    public Artifact create(String type, String proposedId, JSONObject  ctorArgs, String purpose) {
+        Artifact a = create(type, proposedId, ctorArgs);
+        setPurpose(proposedId, purpose);
+        return a;
+    }
+
     public Artifact create(String type, String proposedId, JSONObject  ctorArgs) {
         Manual manual = manualsByType.get(type);
         if (manual == null || !manual.isCreatable() || !factoriesByType.containsKey(type)) {
@@ -105,6 +126,7 @@ public final class Workspace {
     /** Cascades: fails any pending operations targeting this artifact, then removes it and notifies. */
     public void dispose(String artifactId) {
     	availableArtifacts.remove(artifactId);
+    	purposes.remove(artifactId);
         var artifact = instances.remove(artifactId);
         artifact.dispose();
         if (workspaceArtifact != null) {

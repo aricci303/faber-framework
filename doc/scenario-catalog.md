@@ -128,7 +128,7 @@ forward it") gradually compressed across idle cycles under delta-only
 narration pressure, and by the time the real signal arrived, the plan
 was gone — the agent correctly perceived the email and declined to act,
 reasoning soundly from a false premise that no task justified any
-response. This is the finding that motivated PENDING INTENTIONS. Prior
+response. This is the finding that motivated ONGOING INTENTIONS. Prior
 to the REPLY-to-UserConsole refactor, this scenario also once produced
 a duplicate reply, since REPLY at the time had no correlation id and no
 way for the agent to tell, from context alone, whether it had already
@@ -253,7 +253,7 @@ spotting gaps before designing the next one rather than after:
 | WORKSPACE, manuals | yes | yes | yes | yes |
 | FOCUS gating signals | — | yes | yes | yes |
 | `operation_started`/completed/failed | yes | yes | yes | yes |
-| PENDING INTENTIONS / trigger fidelity | — | yes | — | yes (two, simultaneous) |
+| ONGOING INTENTIONS / trigger fidelity | — | yes | — | yes (two, simultaneous) |
 | Belief-mapped observable properties | — | — | yes (late focus) | yes (`fired_alarms`) |
 | UserConsole / WorkspaceArtifact uniformity | yes | yes | yes | yes |
 | AlarmArtifact / time-as-artifact | — | — | — | yes |

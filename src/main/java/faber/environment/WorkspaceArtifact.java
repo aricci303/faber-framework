@@ -31,7 +31,8 @@ public final class WorkspaceArtifact extends Artifact {
                 String type = (String) params.get("type");
                 String proposedId = (String) params.get("proposed_id");
                 JSONObject ctorArgs = params.getJSONObject("constructor_parameters");
-                workspace.create(type, proposedId, ctorArgs); // provision() inside triggers notifyArtifactJoined
+                String purpose = params.has("purpose") ? params.optString("purpose", null) : null;
+                workspace.create(type, proposedId, ctorArgs, purpose); // provision() inside triggers notifyArtifactJoined
                 return List.of(proposedId);
             }
             case "dispose_artifact": {
@@ -79,8 +80,10 @@ public final class WorkspaceArtifact extends Artifact {
                                 List.of(new Manual.Param("artifact_id", "id of the artifact that left")))
                 ),
                 List.of(
-                        new Manual.Operation("create_artifact(type, proposed_id, constructor_parameters)",
-                                "instantiate a new artifact of a creatable type",
+                        new Manual.Operation("create_artifact(type, proposed_id, constructor_parameters, purpose)",
+                                "instantiate a new artifact of a creatable type. purpose is optional: one line saying what this "
+                                + "particular artifact is for and when to consult it — shown in WORKSPACE every turn as its cue, "
+                                + "so give one to any artifact you create to hold knowledge for your future self",
                                 List.of(new Manual.Param("artifact_id", "the id actually assigned"))),
                         new Manual.Operation("dispose_artifact(artifact_id)",
                                 "remove an artifact from the workspace", List.of()),

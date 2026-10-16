@@ -96,7 +96,17 @@ public class Agent {
     }
 	
 	public void doYourJobAndSelfEvaluate(int cyclesBudget) throws Exception {
+		doYourJobAndSelfEvaluate(cyclesBudget, () -> false);
+	}
+
+	/**
+	 * Runs up to cyclesBudget cycles, stopping early — after the cycle in progress completes — as soon as
+	 * stopWhen returns true. It is evaluated once after every cycle. Lets a scenario driver end a run on a
+	 * condition it can observe, instead of guessing a cycle count in advance. Returns the cycles actually run.
+	 */
+	public int doYourJobAndSelfEvaluate(int cyclesBudget, java.util.function.BooleanSupplier stopWhen) throws Exception {
 		long totalInputTokens = 0, totalOutputTokens = 0;
+		int cyclesRun = 0;
 		for (int i = 0; i < cyclesBudget; i++) {
          	if (logCycle) {
          		System.out.println("=== cycle " + agentArch.getNextCycleToRun() + " ===");            
@@ -128,15 +138,18 @@ public class Agent {
 	                System.out.println(prefix + "[Coherence] pass=" + cycleResult.coherences().get(a).pass + " " + cycleResult.coherences().get(a).notes);
 	            }
          	}
+			cyclesRun++;
+			if (stopWhen.getAsBoolean()) break;
 		}
 		
         PredictiveSufficiencyProtocol.Score score = PredictiveSufficiencyProtocol.run(
                 agentArch.trace(), Agent::trivialPredictor);
         System.out.println("Predictive sufficiency: " + score.correct + "/" + score.total
                 + " = " + score.accuracy());
-        System.out.println("Total tokens across " + cyclesBudget + " cycles — input: " + totalInputTokens
+        System.out.println("Total tokens across " + cyclesRun + " cycles — input: " + totalInputTokens
                 + ", output: " + totalOutputTokens
                 + " (input total includes cache creation + cache read, comparable to the Claude console's own reporting)");
+		return cyclesRun;
 	}
 	
     private static PlanResult.ActionKind trivialPredictor(

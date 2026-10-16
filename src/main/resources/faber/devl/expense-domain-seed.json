@@ -1,0 +1,44 @@
+{
+  "domain": "Expense approval at Halden & Co.",
+  "note": "Designer-seeded skeleton, prepared with Finance Operations: the vocabulary of the domain and where each concept lives in the expense system. Deliberately contains NO approval rules - those are what the agent has to learn.",
+  "concepts": [
+    {
+      "name": "Employee", "kind": "actor",
+      "definition": "A person at Halden & Co. who spends money on the company's behalf and asks to be reimbursed. Expenses carry the employee's first name."
+    },
+    {
+      "name": "Expense", "kind": "entity",
+      "definition": "One request by an employee to be reimbursed for one expense. It has an amount in EUR, a category, a date, a description, and a flag saying whether a receipt is attached; some categories carry extra details (attendees, cabin and flight hours, nights, vendor, manager approval). It waits in a queue until exactly one decision is recorded for it.",
+      "relations": [
+        {"type": "made-by", "target": "Employee"},
+        {"type": "belongs-to", "target": "Category"},
+        {"type": "may-have", "target": "Receipt"},
+        {"type": "receives", "target": "Decision"}
+      ],
+      "groundings": ["expense-system-01.list_pending", "expense-system-01.get_expense"]
+    },
+    {
+      "name": "Category", "kind": "value",
+      "definition": "The kind of expense this is. Halden & Co. uses six: meals, flight, lodging, software, equipment, training. Each category is judged by its own rules."
+    },
+    {
+      "name": "Receipt", "kind": "entity",
+      "definition": "Proof of payment attached to an expense. The expense shows whether one is attached (receipt_attached)."
+    },
+    {
+      "name": "Decision", "kind": "value",
+      "definition": "What is recorded on an expense: approve, reject, or escalate to a role. A recorded decision is final.",
+      "relations": [{"type": "escalate-goes-to", "target": "EscalationRole"}],
+      "groundings": ["expense-system-01.approve_expense", "expense-system-01.reject_expense", "expense-system-01.escalate_expense"]
+    },
+    {
+      "name": "EscalationRole", "kind": "actor",
+      "definition": "A role an expense can be sent up to when it is not the approver's to decide: manager, director, or it (the IT department)."
+    },
+    {
+      "name": "ApprovalPolicy", "kind": "process",
+      "definition": "The company's rules that determine which decision is correct for each expense. They are NOT written down in this model: they are learned, from the tutor and from feedback, and then recorded here as rules.",
+      "relations": [{"type": "determines", "target": "Decision"}, {"type": "applies-to", "target": "Expense"}]
+    }
+  ]
+}

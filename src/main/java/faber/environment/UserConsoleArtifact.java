@@ -25,6 +25,14 @@ public final class UserConsoleArtifact extends Artifact {
 
 	public int sentMessageCount() { return sentMessageCount.get(); }
 
+	// What was sent, in order — read-only, for scenario drivers that assess an agent's final report. Same status as
+	// sentMessageCount: observability from outside, no effect on send_msg_to_user itself.
+	private final java.util.List<String> sentMessages = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
+	public java.util.List<String> sentMessages() {
+		synchronized (sentMessages) { return new java.util.ArrayList<>(sentMessages); }
+	}
+
     public UserConsoleArtifact(String id, Workspace workspace) {
         super(id, type, workspace);
     }
@@ -35,6 +43,7 @@ public final class UserConsoleArtifact extends Artifact {
             case "send_msg_to_user": {
                 String text = params.getString("text");
                 System.out.println("[MSG TO USER] " + text); // stand-in for real delivery in this sketch
+                sentMessages.add(text);
                 sentMessageCount.incrementAndGet();
                 return List.of();
             }
