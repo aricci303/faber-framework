@@ -1,0 +1,93 @@
+{
+ "note": "The framework's base of the task library: practices that are about doing ANY work in this process, with no word of a domain — the few that name it are slots the case fills (CaseData.REQUIRED_SLOTS). Each plan says when it applies, why, and what may be adapted; only practices of disclosure are mandatory. The case's own file adds its tasks and its domain-specific plans; the agent sees one library.",
+ "plans": [
+  {
+   "id": "say-so-when-sources-disagree",
+   "name": "Say so when your sources disagree",
+   "status": "mandatory",
+   "applies_to": [
+    "*"
+   ],
+   "when": "What the system tells you — a flag, an audit, any feedback — differs from what the domain model, a manual or this library says, whichever of them you believe is right.",
+   "steps": [
+    "Set the two side by side: what the source says, and what the system said. Do not settle it silently by deciding which of them is wrong.",
+    "In your report, say plainly which source said what, and which {items} you decided under the rule that is in question.",
+    "Propose the change to the owners of the source you think is behind — or, if you think the system is the one at fault, say so and why — with what you observed as the evidence."
+   ],
+   "why": "A source can only be corrected by those who own it, and only if someone tells them; a disagreement you settle on your own, even correctly, leaves the next reader where you started. Being sure which source is wrong is not being right: a model can lag the world and a flag can be mistaken, and from where you stand you cannot always tell which.",
+   "adapt": "Only the how: your own words, and when in the work you do it. That the disagreement is said, and proposed, is not optional; if you cannot do it, say that and why.",
+   "source": "{experts}",
+   "since": 1
+  },
+  {
+   "id": "deciding-while-sources-disagree",
+   "name": "Deciding while your sources disagree",
+   "status": "recommended",
+   "applies_to": [
+    "*"
+   ],
+   "when": "The situation of 'Say so when your sources disagree' arises while {items} are still to be decided.",
+   "steps": [
+    "For the {items} still to decide, prefer the rule the system's feedback quotes: it shows what is enforced.",
+    "Where that is not clear enough to decide, ask or escalate rather than guess.",
+    "Say which rule you used, in the reason of each decision."
+   ],
+   "why": "A source can lag the world; a flag that quotes a rule is evidence of what is enforced now.",
+   "adapt": "If you have reason to think the feedback is the one at fault, weigh them differently — and say why.",
+   "source": "{experts}",
+   "since": 1
+  },
+  {
+   "id": "keep-a-record",
+   "name": "Keep a record of what you decide",
+   "status": "recommended",
+   "applies_to": [
+    "*"
+   ],
+   "when": "You decide several {items} in one piece of work.",
+   "steps": [
+    "As you record each decision, note — somewhere you can read back — the {item}'s id, what you decided and the rule it rests on.",
+    "Read the record when you report, and when feedback arrives about some of your decisions."
+   ],
+   "why": "Decisions are final and feedback may come late or in pieces; a report written from memory is the likeliest to be wrong.",
+   "adapt": "Form and place are yours. For one or two {items} within a single step, memory may do.",
+   "source": "{experts}",
+   "since": 1
+  },
+  {
+   "id": "tell-your-reader",
+   "name": "Tell your reader what was decided",
+   "status": "recommended",
+   "applies_to": [
+    "*"
+   ],
+   "when": "You report the outcome of a piece of work.",
+   "steps": [
+    "Name each {item} with the decision taken, so that your reader can find any of them.",
+    "Say which decisions you are unsure of, and which you know or suspect were wrong, and why.",
+    "Say what you could not do, and where you departed from a recommended plan if it matters to your reader."
+   ],
+   "why": "Your reader cannot see the work; counts and summaries do not let them act on a particular {item}.",
+   "adapt": "Length and form are yours; routine decisions may be grouped as long as each can be found.",
+   "source": "{experts}",
+   "since": 1
+  },
+  {
+   "id": "let-feedback-reach-you",
+   "name": "Let feedback reach you before you commit the rest",
+   "status": "recommended",
+   "applies_to": [
+    "*"
+   ],
+   "when": "The system can tell you, at once or later, whether a decision was right, and some decisions are still to be taken.",
+   "steps": [
+    "Decide a few, then look at what the system has told you about them before you decide the rest.",
+    "Apply what bears on the rest before you decide it."
+   ],
+   "why": "A decision is final, and a rule misapplied to every remaining {item} cannot be taken back.",
+   "adapt": "How many you decide before looking is yours; where the system gives no feedback there is nothing to wait for.",
+   "source": "{experts}",
+   "since": 1
+  }
+ ]
+}

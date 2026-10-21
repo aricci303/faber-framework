@@ -1,0 +1,51 @@
+{
+  "domain": "meeting-room bookings at Northwind Studio",
+  "note": "Keyword probes for the toy case's rules (see RuleReference).",
+  "items": [
+    {
+      "id": "r-focus",
+      "layer": "rules",
+      "label": "focus rooms: up to 2 hours",
+      "facts": [
+        "focus",
+        "2"
+      ]
+    },
+    {
+      "id": "r-workshop",
+      "layer": "rules",
+      "label": "workshop rooms: up to 4 hours",
+      "facts": [
+        "workshop",
+        "4"
+      ]
+    },
+    {
+      "id": "v2-focus",
+      "layer": "v2",
+      "label": "focus rooms: limit now 1 hour",
+      "facts": [
+        "focus",
+        "1"
+      ]
+    }
+  ],
+  "change": {
+    "unchanged": [
+      "r-workshop"
+    ],
+    "replaced": [
+      {
+        "rule": "r-focus",
+        "by": "v2-focus",
+        "oldFacts": [
+          "2"
+        ],
+        "topic": [
+          "focus"
+        ]
+      }
+    ],
+    "note": "What the change did to the rules, for the measurements by home, as ORDERED arrays (the order is what a report lists). 'unchanged': rules the change left alone. 'replaced': for each rule of layer 'rules' that the change replaced, 'by' (the item of layer 'v2' that states it now), 'oldFacts' (the facts that make up its OLD value: what a playbook that still states it as current would contain) and 'topic' (the words that say which rule a sentence is about)."
+  }
+}

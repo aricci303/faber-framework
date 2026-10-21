@@ -64,32 +64,44 @@ public interface LlmClient {
         private final Model model;
         private AnthropicClient client;
         
+        /** The id of the model this JVM's Anthropic client was built with (see resolveModelId), "" before one exists: what a run records, so that a result is never separated from the model that made it. */
+        private static volatile String modelInUse = "";
+        private static volatile boolean announced = false;
+        public static String modelInUse() { return modelInUse; }
+
+        /** The model a launch uses: the one the architecture asks for, unless -Dfaber.llm.model=ID (or a tool's --llm-model=ID) names another. Any id the API knows works, including ones this SDK has no constant for. */
+        public static String resolveModelId(String askedFor, String override) { return override == null || override.isBlank() ? askedFor : override.trim(); }
+
         public AnthropicLlmClient(Model model) {
-        	this.model = model;
+            String asked = model.asString(), id = resolveModelId(asked, System.getProperty("faber.llm.model"));
+            this.model = id.equals(asked) ? model : Model.Companion.of(id);
+            modelInUse = id; announced = false;
+            if (!id.equals(asked)) System.err.println("[LLM] model: " + id + " (named by -Dfaber.llm.model; the architecture asks for " + asked + ")");
             client = AnthropicOkHttpClient.fromEnv();
         }
 
         @Override
         public LlmCallResult plan(String systemPrompt, String context) throws IOException, InterruptedException {
 
+            if (!announced) { announced = true; System.err.println("[LLM] model in use: " + modelInUse); }
             // System.out.println("--------------------- CONTEXT: \n"+ context+"\n---------------------\n");
             
-            com.anthropic.models.messages.MessageCreateParams.Builder paramsBuilder = MessageCreateParams.builder()
-                .model(model)
-                .maxTokens(maxTokens())
-                .systemOfTextBlockParams(java.util.List.of(
-                        TextBlockParam.builder()
-                                .text(systemPrompt)
-                                .cacheControl(CacheControlEphemeral.builder().build())
-                                .build()))
-                .addUserMessage(context);
-            if (thinkingDisabled()) paramsBuilder.thinking(com.anthropic.models.messages.ThinkingConfigDisabled.builder().build());
-            com.anthropic.models.messages.MessageCreateParams params = paramsBuilder.build();
-                        
             // Transient server overload is retried indefinitely (as before). A response that comes back with NO text
-            // block — observed once in a long run, killing it with "Unexpected response shape" — is retried a few
-            // times, with the reason logged, before giving up with a message that says why.
-            return callWithRetries(() -> {
+            // block — observed in long runs, killing them with "Unexpected response shape" — is retried a few times, with
+            // the reason logged; and when the call used its whole output budget and returned nothing (the hidden thinking
+            // took it all), the next attempt is given a larger one, up to maxTokensCap(), before giving up with a message that says why.
+            return callWithRetries(tokens -> {
+                com.anthropic.models.messages.MessageCreateParams.Builder paramsBuilder = MessageCreateParams.builder()
+                    .model(model)
+                    .maxTokens(tokens)
+                    .systemOfTextBlockParams(java.util.List.of(
+                            TextBlockParam.builder()
+                                    .text(systemPrompt)
+                                    .cacheControl(CacheControlEphemeral.builder().build())
+                                    .build()))
+                    .addUserMessage(context);
+                if (thinkingDisabled()) paramsBuilder.thinking(com.anthropic.models.messages.ThinkingConfigDisabled.builder().build());
+                com.anthropic.models.messages.MessageCreateParams params = paramsBuilder.build();
                 Message message = null;
                 while (true) {
                     try {
@@ -101,7 +113,7 @@ public interface LlmClient {
                     }
                 }
                 return adapt(message);
-            }, MAX_EMPTY_RESPONSE_ATTEMPTS, ms -> { try { Thread.sleep(ms); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); } });
+            }, maxTokens(), maxTokensCap(), MAX_EMPTY_RESPONSE_ATTEMPTS, ms -> { try { Thread.sleep(ms); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); } });
         }        
 
         static final int MAX_EMPTY_RESPONSE_ATTEMPTS = 3;
@@ -127,18 +139,32 @@ public interface LlmClient {
         /** -Dfaber.llm.thinking=disabled turns model "thinking" off explicitly; anything else leaves the model's own default. */
         public static boolean thinkingDisabled() { return "disabled".equalsIgnoreCase(System.getProperty("faber.llm.thinking", "default")); }
 
-        public static String settingsSummary() { return "maxTokens=" + maxTokens() + ", thinking=" + (thinkingDisabled() ? "disabled (explicit)" : "model default"); }
+        /** The most an attempt may be given after one returned no text because it used its whole budget: -Dfaber.llm.maxTokensCap=N (default 32000). No larger than maxTokens() means no escalation. */
+        public static long maxTokensCap() { return Long.getLong("faber.llm.maxTokensCap", 32000L); }
+
+        public static String settingsSummary() {
+            return "maxTokens=" + maxTokens() + (maxTokensCap() > maxTokens() ? " (raised, up to " + maxTokensCap() + ", for a call that returns no text)" : "") + ", thinking=" + (thinkingDisabled() ? "disabled (explicit)" : "model default");
+        }
 
         /**
          * Calls until a response carries a text block, up to maxAttempts times (waiting 2s, 4s, ... between attempts);
          * each empty response is logged with its stop reason, block count and output tokens. After the last one it
          * throws, with the same details in the message — a failure that explains itself.
          */
-        public static LlmCallResult callWithRetries(java.util.function.Supplier<RawResponse> call, int maxAttempts,
+public static LlmCallResult callWithRetries(java.util.function.Supplier<RawResponse> call, int maxAttempts,
                 java.util.function.LongConsumer sleepMillis) throws IOException {
-            RawResponse last = null;
+            return callWithRetries(tokens -> call.get(), 0, 0, maxAttempts, sleepMillis);       // the budget is not the caller's to raise: no escalation
+        }
+
+        /**
+         * The same, with a budget per attempt: the first attempt is given firstMaxTokens; when an attempt ends with stop_reason max_tokens and NO text — the call spent its whole output budget on
+         * hidden thinking — the next is given twice as much, up to cap. An attempt that fails for another reason is repeated with the same budget. Every raise is logged.
+         */
+        public static LlmCallResult callWithRetries(java.util.function.LongFunction<RawResponse> call, long firstMaxTokens, long cap, int maxAttempts,
+                java.util.function.LongConsumer sleepMillis) throws IOException {
+            RawResponse last = null; long tokens = firstMaxTokens;
             for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-                last = call.get();
+                last = call.apply(tokens);
                 if (last.thinkingBlocks() > 0)
                     System.err.println("[LLM] output " + last.outputTokens() + " tokens: visible text " + last.textChars() + " chars; hidden thinking "
                             + last.thinkingBlocks() + " block(s), " + last.thinkingChars() + " chars (thinking counts as output tokens)");
@@ -148,7 +174,14 @@ public interface LlmClient {
                 System.err.println("[LLM] response without a text block (stop_reason=" + last.stopReason() + ", content blocks="
                         + last.blockCount() + ", thinking blocks=" + last.thinkingBlocks() + ", output_tokens=" + last.outputTokens() + ") — attempt " + attempt + "/" + maxAttempts
                         + (attempt < maxAttempts ? ", retrying" : ", giving up"));
-                if (attempt < maxAttempts) sleepMillis.accept(2000L * attempt);
+                if (attempt < maxAttempts) {
+                    if ("max_tokens".equals(last.stopReason()) && tokens < cap) {
+                        long next = Math.min(tokens * 2, cap);
+                        System.err.println("[LLM] ceiling escalation: the call used all " + tokens + " output tokens and returned no text; the next attempt is given " + next);
+                        tokens = next;
+                    }
+                    sleepMillis.accept(2000L * attempt);
+                }
             }
             throw new IOException("Unexpected response shape: no text block after " + maxAttempts + " attempts (last stop_reason="
                     + last.stopReason() + ", content blocks=" + last.blockCount() + ", output_tokens=" + last.outputTokens() + ")");

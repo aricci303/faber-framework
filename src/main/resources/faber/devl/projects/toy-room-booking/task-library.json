@@ -1,0 +1,47 @@
+{
+ "id": "room-booking-task-library",
+ "title": "Northwind Studio: how booking requests are handled, as the office manager keeps it",
+ "versions": [
+  {
+   "id": "1",
+   "released": "2026-10-18",
+   "changes": [
+    "First release."
+   ]
+  }
+ ],
+ "tasks": [
+  {
+   "id": "handle-requests",
+   "name": "Handle the pending booking requests",
+   "summary": "Grant or refuse every booking request that is waiting, and tell the person who asked what was decided.",
+   "input": "The pending requests the booking system lists (list_pending); each request's details come from get_request.",
+   "done": "Every request that was pending has been granted or refused, and the person who asked has been told what was decided.",
+   "failed": "A request is left pending without a reason, or the report says something that is not so.",
+   "quality": [
+    "Correct before fast: a decision is final once it is recorded.",
+    "A decision rests on the booking rules in force, as the domain model gives them now."
+   ],
+   "mandate": "You grant or refuse alone, request by request. You do not change a rule.",
+   "scope": "Pending requests in the booking system. A request about anything else is outside this task: say so."
+  }
+ ],
+ "plans": [
+  {
+   "id": "look-at-the-room-kind",
+   "name": "Look at the room kind before the hours",
+   "status": "recommended",
+   "applies_to": [
+    "handle-requests"
+   ],
+   "when": "You are about to decide a request.",
+   "steps": [
+    "Read the request's room kind, then the rules for that kind in the domain model, then compare the hours."
+   ],
+   "why": "The limit depends on the kind of room, so the hours alone say nothing.",
+   "adapt": "Any order that gets you to the right rule.",
+   "source": "the office manager",
+   "since": 1
+  }
+ ]
+}

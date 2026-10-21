@@ -1,0 +1,68 @@
+{
+ "id": "expense-task-library",
+ "title": "Halden & Co.: how expenses are handled, as the finance team keeps it",
+ "versions": [
+  {
+   "id": "1",
+   "released": "2026-10-18",
+   "changes": [
+    "First release."
+   ]
+  }
+ ],
+ "tasks": [
+  {
+   "id": "process-queue",
+   "name": "Process the pending expenses",
+   "summary": "Decide every expense that is waiting, and tell the person who asked what was decided.",
+   "input": "The pending expenses the expense system lists (list_pending); each expense's details come from get_expense. A request to process the queue, to handle what is pending, or the like, is this task.",
+   "done": "Every expense that was pending has a decision recorded in the expense system, and the person who asked has been told what was decided and anything they should know.",
+   "failed": "An expense is left pending without a reason; a decision is recorded that rests on no rule you can name; or the report says something that is not so.",
+   "quality": [
+    "Correct before fast: a decision is final once it is recorded.",
+    "A decision rests on the rules in force — the domain model as you can read it now — and not on what you remember of them.",
+    "The report is honest about your own work: it names the expenses, and says which decisions you are unsure of and which you know or suspect were wrong."
+   ],
+   "mandate": "You decide alone, expense by expense: approve, reject, or escalate to the role the rules name. You do not change a rule, you do not decide what the rules assign to another role, and you do not carry out anything that is not a decision on a pending expense.",
+   "scope": "Pending expenses in the expense system. A request about anything else is outside this task: say so, and say what you can do instead."
+  }
+ ],
+ "plans": [
+  {
+   "id": "check-for-duplicates",
+   "name": "Check an expense against the others before you decide it",
+   "status": "recommended",
+   "applies_to": [
+    "process-queue"
+   ],
+   "when": "You are about to decide an expense, and there are other expenses, pending or already decided, in this piece of work.",
+   "steps": [
+    "Compare the expense with the others — those still pending and those you have decided — using what the domain model says makes one expense a duplicate of another.",
+    "If it is one, decide it as the rules say for a duplicate; the order in which you meet the two does not matter."
+   ],
+   "why": "The expense system does not mark a duplicate: only a comparison finds it, and an expense decided before it is compared cannot be taken back.",
+   "adapt": "How you compare is yours — a note, the pending list, get_expense on the candidates. In a queue of one there is nothing to compare.",
+   "source": "the finance team",
+   "since": 1
+  },
+  {
+   "id": "one-way-through-a-queue",
+   "name": "One way through a queue",
+   "status": "example",
+   "applies_to": [
+    "process-queue"
+   ],
+   "when": "You have been asked to process what is pending.",
+   "steps": [
+    "List what is pending, and read each expense's details.",
+    "For each expense, read the rules for its category in the domain model, at the version in force.",
+    "Decide it, and note the decision with the rule it rests on.",
+    "When nothing is pending, report (see 'Tell your reader what was decided')."
+   ],
+   "why": "A sequence that takes the task from request to report; an illustration, not the only one.",
+   "adapt": "Any order; one expense at a time or several; any record that serves you.",
+   "source": "the finance team",
+   "since": 1
+  }
+ ]
+}

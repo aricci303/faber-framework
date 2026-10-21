@@ -1,0 +1,37 @@
+{
+ "id": "toy-room-booking",
+ "devlCase": "faber.devl.cases.toy.ToyDevlCase",
+ "previousIds": [
+  "toy"
+ ],
+ "title": "meeting-room bookings at Northwind Studio",
+ "itemIdPattern": "\\bB\\d{3}\\b",
+ "tutorTopics": [
+  {
+   "topic": "focus rooms",
+   "keywords": [
+    "focus"
+   ]
+  },
+  {
+   "topic": "workshop rooms",
+   "keywords": [
+    "workshop"
+   ]
+  }
+ ],
+ "texts": {
+  "welcome": "Welcome to Northwind Studio. Starting today you handle our meeting-room booking requests, working in the booking system.",
+  "organization": "Northwind Studio",
+  "jobSummary": "meeting-room booking requests in the booking system",
+  "company": "office",
+  "experts": "the office manager and the domain experts",
+  "item": "request",
+  "items": "requests",
+  "anItem": "a request",
+  "itemParticulars": "their numbers, hours, rooms",
+  "rulesNoun": "booking rules",
+  "standard": "the booking rules",
+  "tutorExample": "When should I refuse a booking?"
+ }
+}

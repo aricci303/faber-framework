@@ -1,4 +1,4 @@
-package faber.devl;
+package faber.devl.cases.expense;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,7 +9,7 @@ import java.util.Set;
  * that nothing about it can be derived from general knowledge: whatever the agent gets right, it
  * learned (from the tutor, from practice feedback, from its own notes), not from pretraining.
  * v2 is the change introduced in the policy-change assessment (A2a): a few thresholds and the approved-vendor list move, to test
- * whether the agent notices that knowledge acquired in development has gone stale.
+ * whether the agent notices that knowledge acquired while learning has gone stale.
  */
 public final class ExpensePolicy {
 
@@ -38,7 +38,7 @@ public final class ExpensePolicy {
     public static ExpensePolicy v1() { return new ExpensePolicy("v1", 40, 90, Set.of("Linden", "Quark"), 500); }
     public static ExpensePolicy v2() { return new ExpensePolicy("v2", 35, 75, Set.of("Linden", "Orbit"), 400); }
 
-    public Verdict decide(ExpenseCase c) {
+    public Verdict decide(ExpenseClaim c) {
         if (!c.receipt)
             return new Verdict("reject", null, "receipt", describe("receipts"));
         if (c.duplicateOf != null)
@@ -94,8 +94,8 @@ public final class ExpensePolicy {
      * Amounts are expressed relative to the policy's own limits, so the examples stay true when the limits move; none coincides with a claim in any queue.
      */
     public static final class Example {
-        public final String text, expected; public final ExpenseCase expense;
-        Example(String text, ExpenseCase expense, String expected) { this.text = text; this.expense = expense; this.expected = expected; }
+        public final String text, expected; public final ExpenseClaim expense;
+        Example(String text, ExpenseClaim expense, String expected) { this.text = text; this.expense = expense; this.expected = expected; }
     }
 
     public List<Example> examples(String topic) {
@@ -105,52 +105,52 @@ public final class ExpensePolicy {
         switch (topic) {
             case "receipts":
                 out.add(new Example("a " + (mealsAuto - 15) + " EUR meal with no receipt attached is rejected",
-                        ExpenseCases.c("X1", "Alex", "meals", mealsAuto - 15, false, d, "example", null, "attendees", 1), "reject")); break;
+                        ExpenseQueues.c("X1", "Alex", "meals", mealsAuto - 15, false, d, "example", null, "attendees", 1), "reject")); break;
             case "duplicates":
                 out.add(new Example("if the same employee submits two expenses for the same amount on the same date, the second is rejected",
-                        ExpenseCases.c("X2", "Alex", "meals", mealsAuto - 15, true, d, "example", "X1", "attendees", 1), "reject")); break;
+                        ExpenseQueues.c("X2", "Alex", "meals", mealsAuto - 15, true, d, "example", "X1", "attendees", 1), "reject")); break;
             case "meals":
                 out.add(new Example("a " + (mealsAuto + 17) + " EUR team dinner with 5 attendees is approved",
-                        ExpenseCases.c("X3", "Alex", "meals", mealsAuto + 17, true, d, "example", null, "attendees", 5), "approve"));
+                        ExpenseQueues.c("X3", "Alex", "meals", mealsAuto + 17, true, d, "example", null, "attendees", 5), "approve"));
                 out.add(new Example("the same " + (mealsAuto + 17) + " EUR for a single attendee is rejected",
-                        ExpenseCases.c("X4", "Alex", "meals", mealsAuto + 17, true, d, "example", null, "attendees", 1), "reject"));
+                        ExpenseQueues.c("X4", "Alex", "meals", mealsAuto + 17, true, d, "example", null, "attendees", 1), "reject"));
                 out.add(new Example((mealsGroupMax + 18) + " EUR is rejected even with 5 attendees",
-                        ExpenseCases.c("X5", "Alex", "meals", mealsGroupMax + 18, true, d, "example", null, "attendees", 5), "reject")); break;
+                        ExpenseQueues.c("X5", "Alex", "meals", mealsGroupMax + 18, true, d, "example", null, "attendees", 5), "reject")); break;
             case "flights":
                 out.add(new Example("an economy flight of " + (economyAuto - 120) + " EUR is approved",
-                        ExpenseCases.c("X6", "Alex", "flight", economyAuto - 120, true, d, "example", null, "cabin", "economy", "flight_hours", 3), "approve"));
+                        ExpenseQueues.c("X6", "Alex", "flight", economyAuto - 120, true, d, "example", null, "cabin", "economy", "flight_hours", 3), "approve"));
                 out.add(new Example("an economy flight of " + (economyAuto + 130) + " EUR is escalated to the manager",
-                        ExpenseCases.c("X7", "Alex", "flight", economyAuto + 130, true, d, "example", null, "cabin", "economy", "flight_hours", 3), "escalate:manager"));
+                        ExpenseQueues.c("X7", "Alex", "flight", economyAuto + 130, true, d, "example", null, "cabin", "economy", "flight_hours", 3), "escalate:manager"));
                 out.add(new Example("a 3-hour business-class flight is rejected",
-                        ExpenseCases.c("X8", "Alex", "flight", 1500, true, d, "example", null, "cabin", "business", "flight_hours", 3), "reject"));
+                        ExpenseQueues.c("X8", "Alex", "flight", 1500, true, d, "example", null, "cabin", "business", "flight_hours", 3), "reject"));
                 out.add(new Example("an 8-hour business-class flight is escalated to the director",
-                        ExpenseCases.c("X9", "Alex", "flight", 2400, true, d, "example", null, "cabin", "business", "flight_hours", 8), "escalate:director")); break;
+                        ExpenseQueues.c("X9", "Alex", "flight", 2400, true, d, "example", null, "cabin", "business", "flight_hours", 8), "escalate:director")); break;
             case "lodging":
                 out.add(new Example("3 nights at " + (lodgingPerNight - 30) + " EUR a night is approved",
-                        ExpenseCases.c("X10", "Alex", "lodging", (lodgingPerNight - 30) * 3, true, d, "example", null, "nights", 3), "approve"));
+                        ExpenseQueues.c("X10", "Alex", "lodging", (lodgingPerNight - 30) * 3, true, d, "example", null, "nights", 3), "approve"));
                 out.add(new Example("3 nights at " + (lodgingPerNight + 30) + " EUR a night is escalated to the manager",
-                        ExpenseCases.c("X11", "Alex", "lodging", (lodgingPerNight + 30) * 3, true, d, "example", null, "nights", 3), "escalate:manager")); break;
+                        ExpenseQueues.c("X11", "Alex", "lodging", (lodgingPerNight + 30) * 3, true, d, "example", null, "nights", 3), "escalate:manager")); break;
             case "software":
                 out.add(new Example("a " + (softwareAuto - 60) + " EUR licence from " + vendor + " is approved",
-                        ExpenseCases.c("X12", "Alex", "software", softwareAuto - 60, true, d, "example", null, "vendor", vendor), "approve"));
+                        ExpenseQueues.c("X12", "Alex", "software", softwareAuto - 60, true, d, "example", null, "vendor", vendor), "approve"));
                 out.add(new Example("a 60 EUR licence from a vendor that is not on the list is rejected",
-                        ExpenseCases.c("X13", "Alex", "software", 60, true, d, "example", null, "vendor", "Zenith"), "reject"));
+                        ExpenseQueues.c("X13", "Alex", "software", 60, true, d, "example", null, "vendor", "Zenith"), "reject"));
                 out.add(new Example("a " + (softwareAuto + 150) + " EUR licence from " + vendor + " is escalated to IT",
-                        ExpenseCases.c("X14", "Alex", "software", softwareAuto + 150, true, d, "example", null, "vendor", vendor), "escalate:it")); break;
+                        ExpenseQueues.c("X14", "Alex", "software", softwareAuto + 150, true, d, "example", null, "vendor", vendor), "escalate:it")); break;
             case "equipment":
                 out.add(new Example("equipment of " + (equipAuto - 150) + " EUR is approved",
-                        ExpenseCases.c("X15", "Alex", "equipment", equipAuto - 150, true, d, "example", null), "approve"));
+                        ExpenseQueues.c("X15", "Alex", "equipment", equipAuto - 150, true, d, "example", null), "approve"));
                 out.add(new Example("equipment of " + (equipAuto + 400) + " EUR is escalated to the manager",
-                        ExpenseCases.c("X16", "Alex", "equipment", equipAuto + 400, true, d, "example", null), "escalate:manager"));
+                        ExpenseQueues.c("X16", "Alex", "equipment", equipAuto + 400, true, d, "example", null), "escalate:manager"));
                 out.add(new Example("equipment of " + (equipMax + 500) + " EUR is rejected",
-                        ExpenseCases.c("X17", "Alex", "equipment", equipMax + 500, true, d, "example", null), "reject")); break;
+                        ExpenseQueues.c("X17", "Alex", "equipment", equipMax + 500, true, d, "example", null), "reject")); break;
             case "training":
                 out.add(new Example("manager-approved training of " + (trainingAuto - 350) + " EUR is approved",
-                        ExpenseCases.c("X18", "Alex", "training", trainingAuto - 350, true, d, "example", null, "manager_approved", true), "approve"));
+                        ExpenseQueues.c("X18", "Alex", "training", trainingAuto - 350, true, d, "example", null, "manager_approved", true), "approve"));
                 out.add(new Example("manager-approved training of " + (trainingAuto + 450) + " EUR is escalated to the director",
-                        ExpenseCases.c("X19", "Alex", "training", trainingAuto + 450, true, d, "example", null, "manager_approved", true), "escalate:director"));
+                        ExpenseQueues.c("X19", "Alex", "training", trainingAuto + 450, true, d, "example", null, "manager_approved", true), "escalate:director"));
                 out.add(new Example("training of 500 EUR without manager approval is rejected",
-                        ExpenseCases.c("X20", "Alex", "training", 500, true, d, "example", null, "manager_approved", false), "reject")); break;
+                        ExpenseQueues.c("X20", "Alex", "training", 500, true, d, "example", null, "manager_approved", false), "reject")); break;
             default: break;
         }
         return out;

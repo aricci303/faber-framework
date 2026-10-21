@@ -1,4 +1,4 @@
-package faber.devl;
+package faber.devl.cases.expense;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -7,6 +7,10 @@ import java.util.Map;
 
 import org.json.JSONObject;
 
+import faber.devl.CaseWorld;
+import faber.devl.Feedback;
+import faber.devl.Outcome;
+import faber.devl.WorkItem;
 import faber.environment.Artifact;
 import faber.environment.Manual;
 import faber.environment.Workspace;
@@ -19,10 +23,9 @@ import faber.environment.Workspace;
  * fact, quoting the current rule). The interface and manual are identical in every stage — what the
  * agent practices on is what it will use.
  */
-public final class ExpenseSystemArtifact extends Artifact {
+public final class ExpenseSystemArtifact extends Artifact implements CaseWorld {
 
     public static final String type = "ExpenseSystem";
-    public enum Feedback { NONE, PRACTICE, AUDIT }
 
     public static final class Decision {
         public final String expenseId, kind, to; public final boolean correct; public final String expected;
@@ -33,14 +36,12 @@ public final class ExpenseSystemArtifact extends Artifact {
         }
     }
 
-    private final Map<String, ExpenseCase> pending = new LinkedHashMap<>();
+    private final Map<String, ExpenseClaim> pending = new LinkedHashMap<>();
     private final List<Decision> decisions = new ArrayList<>();
     private ExpensePolicy policy = ExpensePolicy.v1();
     private Feedback feedback = Feedback.NONE;
     private Runnable onQueueEmpty = null;
-    private boolean policyCue = false;                                       // does the system say which policy version is in force?
-    private boolean decidedVisible = false;                                   // can get_expense still return a claim once it has been decided?
-    private final Map<String, ExpenseCase> decidedCases = new LinkedHashMap<>();
+    private final Map<String, ExpenseClaim> decidedCases = new LinkedHashMap<>();
 
     public ExpenseSystemArtifact(String id, Workspace workspace) {
         super(id, type, workspace);
@@ -48,47 +49,34 @@ public final class ExpenseSystemArtifact extends Artifact {
     }
 
     /** Driver-side: load the next stage's queue and scaffolds. Not an agent operation. */
-    public synchronized void loadStage(List<ExpenseCase> cases, ExpensePolicy policy, Feedback feedback) {
+    /** CaseWorld: the framework's way in. World 1 is the policy of learning, world 2 the changed policy. */
+    @Override @SuppressWarnings("unchecked")
+    public synchronized void loadStage(List<? extends WorkItem> items, int world, Feedback feedback) { loadStage((List<ExpenseClaim>) items, world == 1 ? ExpensePolicy.v1() : ExpensePolicy.v2(), feedback); }
+
+    public synchronized void loadStage(List<ExpenseClaim> cases, ExpensePolicy policy, Feedback feedback) {
         pending.clear();
         decisions.clear();
         decidedCases.clear();
-        for (ExpenseCase c : cases) pending.put(c.id, c);
+        for (ExpenseClaim c : cases) pending.put(c.id, c);
         this.policy = policy;
         this.feedback = feedback;
         notifyObsPropertyChanged("pending_count", currentObsProperties().get("pending_count"), pending.size());
-        if (policyCue) {
-            Object old = currentObsProperties().get("policy_version");
-            if (old == null) currentObsProperties().put("policy_version", policy.name);
-            else notifyObsPropertyChanged("policy_version", old, policy.name);
-        }
     }
 
     /** Driver-side hook, run at the exact moment the last pending claim is decided (inside the artifact's monitor). */
-    public synchronized void setOnQueueEmpty(Runnable r) { this.onQueueEmpty = r; }
-
-    /**
-     * By default a decided claim disappears: get_expense fails for it ("no pending expense"). Real systems keep records,
-     * and the default created a quirk that cost agents effort in two runs (a note about how to verify a duplicate that can
-     * no longer be fetched; a final report unable to say why an earlier decision was flagged). With visible=true, get_expense
-     * also returns decided claims, marked with the decision that was recorded (never whether it was right).
-     */
-    public synchronized void setDecidedVisible(boolean visible) { this.decidedVisible = visible; }
-
-    /**
-     * A detectable cue that the policy changed: with the cue on, every claim record carries the policy version in
-     * force and the system exposes it as an observable property. Development and the clean assessment show "v1"; the
-     * policy-change assessment shows "v2". It says nothing about WHAT changed. Off by default: then the change is
-     * silent, and only an audit flag after a decision can reveal it.
-     */
-    public synchronized void setPolicyCue(boolean cue) { this.policyCue = cue; }
+    @Override public synchronized void setOnQueueEmpty(Runnable r) { this.onQueueEmpty = r; }
 
     /** Driver-side: ids of the claims still awaiting a decision (for scripted agents in tests). */
     public synchronized List<String> pendingIds() { return new ArrayList<>(pending.keySet()); }
 
-    public synchronized int pendingCount() { return pending.size(); }
-    public synchronized int decidedCount() { return decisions.size(); }
-    public synchronized int correctCount() { int n = 0; for (Decision d : decisions) if (d.correct) n++; return n; }
+    @Override public synchronized int pendingCount() { return pending.size(); }
+    @Override public synchronized int decidedCount() { return decisions.size(); }
+    @Override public synchronized int correctCount() { int n = 0; for (Decision d : decisions) if (d.correct) n++; return n; }
     public synchronized List<Decision> decisions() { return new ArrayList<>(decisions); }
+    /** CaseWorld: what the agent decided, as the framework scores it (the label is "approve", "reject" or "escalate:<role>"). */
+    @Override public synchronized List<Outcome> outcomes() {
+        List<Outcome> l = new ArrayList<>(); for (Decision d : decisions) l.add(new Outcome(d.expenseId, d.kind + (d.to != null ? ":" + d.to : ""), d.correct, d.expected)); return l;
+    }
 
     // ---------------------------------------------------------------------------------------------------------
     // One table describes every operation: what it is for, its parameters, what it does to the world, and an example call.
@@ -186,24 +174,22 @@ public final class ExpenseSystemArtifact extends Artifact {
         switch (op) {
             case "list_pending": {
                 StringBuilder sb = new StringBuilder();
-                for (ExpenseCase c : pending.values()) sb.append(c.summary()).append("\n");
+                for (ExpenseClaim c : pending.values()) sb.append(c.summary()).append("\n");
                 main = pending.isEmpty() ? "(no pending expenses)" : sb.toString().trim();
                 break;
             }
             case "get_expense": {
                 String id = String.valueOf(p.get("expense_id"));
-                ExpenseCase c = pending.get(id);
+                ExpenseClaim c = pending.get(id);
                 if (c != null) {
-                    JSONObject j = c.toJson(); if (decidedVisible) j.put("status", "pending"); if (policyCue) j.put("policy_version", policy.name);
+                    JSONObject j = c.toJson(); j.put("status", "pending");
                     main = j.toString();
                     break;
                 }
-                ExpenseCase done = decidedCases.get(id);
+                ExpenseClaim done = decidedCases.get(id);
                 if (done == null) throw new IllegalArgumentException(unknownId(id));
-                if (!decidedVisible) throw new IllegalArgumentException(alreadyDecided(id) + ", and decided expenses can no longer be retrieved or changed");
                 Decision d = null; for (Decision x : decisions) if (x.expenseId.equals(id)) d = x;
                 JSONObject dj = done.toJson().put("status", "decided: " + (d == null ? "?" : d.kind + (d.to != null ? ":" + d.to : "")));
-                if (policyCue) dj.put("policy_version", policy.name);
                 main = dj.toString();
                 break;
             }
@@ -223,7 +209,7 @@ public final class ExpenseSystemArtifact extends Artifact {
     private static String reasonOf(JSONObject p) { return p.has("reason") ? String.valueOf(p.get("reason")) : null; }
 
     private String decide(String id, String kind, String to, String reason) {
-        ExpenseCase c = pending.get(id);
+        ExpenseClaim c = pending.get(id);
         if (c == null) {
             if (decidedCases.containsKey(id)) throw new IllegalArgumentException(alreadyDecided(id) + "; a decision cannot be changed or withdrawn. Nothing was recorded.");
             throw new IllegalArgumentException(unknownId(id) + ". Nothing was recorded.");
@@ -243,21 +229,13 @@ public final class ExpenseSystemArtifact extends Artifact {
         return base;
     }
 
-    public static Manual manual() { return manual(false); }
-
-    /** decidedVisible must match setDecidedVisible: the manual tells the agent what the system will actually do. */
-    public static Manual manual(boolean decidedVisible) { return manual(decidedVisible, false); }
-
-    /** policyCue must match setPolicyCue: the manual lists the policy_version property only when the system really exposes it. */
-    public static Manual manual(boolean decidedVisible, boolean policyCue) {
+    /** The manual tells the agent what the system really does: a decided expense stays retrievable, marked with the decision recorded for it (never whether it was right). */
+    public static Manual manual() {
         List<Manual.Param> observables = new java.util.ArrayList<>();
         observables.add(new Manual.Param("pending_count", "how many expenses are still awaiting a decision"));
-        if (policyCue) observables.add(new Manual.Param("policy_version", "the version of the approval policy currently in force (also shown on every expense)"));
         List<Manual.Operation> ops = new ArrayList<>();
         for (Usage u : USAGE) {
-            String summary = u.summary.replace("%GET%", decidedVisible
-                    ? "pending or already decided; a decided expense also shows the decision recorded for it"
-                    : "pending expenses only: a decided expense can no longer be retrieved");
+            String summary = u.summary.replace("%GET%", "pending or already decided; a decided expense also shows the decision recorded for it");
             ops.add(new Manual.Operation(u.signature(), summary + " " + u.effect + " Example: " + u.exampleText + ".",
                     u.decision ? List.of(new Manual.Param("status", "'recorded', and possibly feedback (see further information)"))
                     : u.name.equals("get_expense") ? List.of(new Manual.Param("expense", "the expense's fields as JSON"))

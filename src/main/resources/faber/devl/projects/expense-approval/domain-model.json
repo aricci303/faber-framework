@@ -1,0 +1,297 @@
+{
+  "id": "expense-approval",
+  "title": "Halden & Co.: expense approval, as the finance team and the domain experts keep it",
+  "versions": [
+    {
+      "id": "1",
+      "released": "2026-01-01",
+      "changes": [
+        "First release, from the Finance policy handbook, revision 1."
+      ]
+    },
+    {
+      "id": "2",
+      "released": "2026-10-01",
+      "changes": [
+        "Meals: the automatic limit is now 35 EUR (was 40) and the group limit 75 EUR (was 90).",
+        "Software: the approved vendors are now Linden and Orbit (Quark was removed).",
+        "Equipment: the automatic limit is now 400 EUR (was 500)."
+      ]
+    }
+  ],
+  "concepts": [
+    {
+      "name": "Employee",
+      "kind": "actor",
+      "definition": "A person at Halden & Co. who spends money on the company's behalf and asks to be reimbursed. Expenses carry the employee's first name."
+    },
+    {
+      "name": "Expense",
+      "kind": "entity",
+      "definition": "One request by an employee to be reimbursed for one expense. It has an amount in EUR, a category, a date, a description, and a flag saying whether a receipt is attached; some categories carry extra details (attendees, cabin and flight hours, nights, vendor, manager approval). It waits in a queue until exactly one decision is recorded for it.",
+      "relations": [
+        {
+          "type": "made-by",
+          "target": "Employee"
+        },
+        {
+          "type": "belongs-to",
+          "target": "Category"
+        },
+        {
+          "type": "may-have",
+          "target": "Receipt"
+        },
+        {
+          "type": "receives",
+          "target": "Decision"
+        }
+      ],
+      "groundings": [
+        "expense-system-01.list_pending",
+        "expense-system-01.get_expense"
+      ],
+      "rules": [
+        {
+          "id": "duplicates-1",
+          "text": "An expense that duplicates an earlier one (same employee, amount and date) is rejected. This check comes after the receipt check and before the category rules.",
+          "source": "Finance policy handbook, section 2 (revision 1)",
+          "confidence": "confirmed",
+          "since": 1
+        }
+      ]
+    },
+    {
+      "name": "Category",
+      "kind": "value",
+      "definition": "The kind of expense this is. Halden & Co. uses six: meals, flight, lodging, software, equipment, training. Each category is judged by its own rules.",
+      "rules": [
+        {
+          "id": "category-1",
+          "text": "The handbook covers meals, flights, lodging, software, equipment and training. It says nothing about any other category.",
+          "source": "Finance policy handbook, scope (revision 1)",
+          "confidence": "confirmed",
+          "since": 1
+        }
+      ]
+    },
+    {
+      "name": "Receipt",
+      "kind": "entity",
+      "definition": "Proof of payment attached to an expense. The expense shows whether one is attached (receipt_attached).",
+      "rules": [
+        {
+          "id": "receipts-1",
+          "text": "Any expense without a receipt attached is rejected, whatever the category. This is the first check, before anything else.",
+          "source": "Finance policy handbook, section 1 (revision 1)",
+          "confidence": "confirmed",
+          "since": 1
+        }
+      ]
+    },
+    {
+      "name": "Decision",
+      "kind": "value",
+      "definition": "What is recorded on an expense: approve, reject, or escalate to a role. A recorded decision is final.",
+      "relations": [
+        {
+          "type": "escalate-goes-to",
+          "target": "EscalationRole"
+        }
+      ],
+      "groundings": [
+        "expense-system-01.approve_expense",
+        "expense-system-01.reject_expense",
+        "expense-system-01.escalate_expense"
+      ]
+    },
+    {
+      "name": "EscalationRole",
+      "kind": "actor",
+      "definition": "A role an expense can be sent up to when it is not the approver's to decide: manager, director, or it (the IT department)."
+    },
+    {
+      "name": "ApprovalPolicy",
+      "kind": "process",
+      "definition": "The company's rules that determine which decision is correct for each expense, as the finance team keeps them in the Finance policy handbook. This model holds them, with their source and the version in which each applies: read the rules of the concept an expense belongs to.",
+      "relations": [
+        {
+          "type": "determines",
+          "target": "Decision"
+        },
+        {
+          "type": "applies-to",
+          "target": "Expense"
+        }
+      ],
+      "rules": [
+        {
+          "id": "procedure-1",
+          "text": "How to decide an expense, in this order: 1. no receipt attached: reject. 2. duplicate of an earlier expense (same employee, amount and date): reject. 3. otherwise apply the rule for its category (meals, flights, lodging, software, equipment, training). The first check that applies decides it.",
+          "source": "Finance policy handbook, section 3 (revision 1)",
+          "confidence": "confirmed",
+          "since": 1
+        }
+      ]
+    },
+    {
+      "name": "Meals",
+      "kind": "value",
+      "definition": "Food and drink for the employee or for a group. The expense says how many people attended.",
+      "relations": [
+        {
+          "type": "is-a",
+          "target": "Category"
+        }
+      ],
+      "groundings": [
+        "expense-system-01.get_expense (attendees)"
+      ],
+      "rules": [
+        {
+          "id": "meals-1",
+          "text": "Meals: up to 40 EUR is approved outright. Above 40 and up to 90 EUR it is approved only for a team or client meal, with two or more attendees. Above 90 EUR, or above 40 EUR for a single attendee, it is rejected.",
+          "source": "Finance policy handbook, section 4 (revision 1)",
+          "confidence": "confirmed",
+          "since": 1,
+          "until": 2
+        },
+        {
+          "id": "meals-2",
+          "text": "Meals: up to 35 EUR is approved outright. Above 35 and up to 75 EUR it is approved only for a team or client meal, with two or more attendees. Above 75 EUR, or above 35 EUR for a single attendee, it is rejected.",
+          "source": "Finance policy handbook, section 4 (revision 2)",
+          "confidence": "confirmed",
+          "since": 2
+        }
+      ]
+    },
+    {
+      "name": "Flight",
+      "kind": "value",
+      "definition": "A flight. The expense says the cabin (economy or business) and the flight hours.",
+      "relations": [
+        {
+          "type": "is-a",
+          "target": "Category"
+        }
+      ],
+      "groundings": [
+        "expense-system-01.get_expense (cabin, flight_hours)"
+      ],
+      "rules": [
+        {
+          "id": "flights-1",
+          "text": "Flights: economy up to 900 EUR is approved; economy above that is escalated to the employee's manager. Business class is rejected unless the flight is longer than 6 hours, in which case it is escalated to the director.",
+          "source": "Finance policy handbook, section 5 (revision 1)",
+          "confidence": "confirmed",
+          "since": 1
+        }
+      ]
+    },
+    {
+      "name": "Lodging",
+      "kind": "value",
+      "definition": "Accommodation. The expense says the number of nights; the rule is per night.",
+      "relations": [
+        {
+          "type": "is-a",
+          "target": "Category"
+        }
+      ],
+      "groundings": [
+        "expense-system-01.get_expense (nights)"
+      ],
+      "rules": [
+        {
+          "id": "lodging-1",
+          "text": "Lodging: up to 180 EUR per night is approved; above that per-night rate, escalate to the manager.",
+          "source": "Finance policy handbook, section 6 (revision 1)",
+          "confidence": "confirmed",
+          "since": 1
+        }
+      ]
+    },
+    {
+      "name": "Software",
+      "kind": "value",
+      "definition": "Software and licences. The expense says the vendor.",
+      "relations": [
+        {
+          "type": "is-a",
+          "target": "Category"
+        }
+      ],
+      "groundings": [
+        "expense-system-01.get_expense (vendor)"
+      ],
+      "rules": [
+        {
+          "id": "software-1",
+          "text": "Software: only vendors on the approved list (Linden, Quark) can be approved, and only up to 200 EUR; above that from an approved vendor, escalate to IT. A vendor not on the list is rejected.",
+          "source": "Finance policy handbook, section 7 (revision 1)",
+          "confidence": "confirmed",
+          "since": 1,
+          "until": 2
+        },
+        {
+          "id": "software-2",
+          "text": "Software: only vendors on the approved list (Linden, Orbit) can be approved, and only up to 200 EUR; above that from an approved vendor, escalate to IT. A vendor not on the list is rejected.",
+          "source": "Finance policy handbook, section 7 (revision 2)",
+          "confidence": "confirmed",
+          "since": 2
+        }
+      ]
+    },
+    {
+      "name": "Equipment",
+      "kind": "value",
+      "definition": "Equipment and hardware.",
+      "relations": [
+        {
+          "type": "is-a",
+          "target": "Category"
+        }
+      ],
+      "rules": [
+        {
+          "id": "equipment-1",
+          "text": "Equipment: up to 500 EUR is approved; above 500 and up to 2000 EUR escalate to the manager; above 2000 EUR reject — it must go through procurement.",
+          "source": "Finance policy handbook, section 8 (revision 1)",
+          "confidence": "confirmed",
+          "since": 1,
+          "until": 2
+        },
+        {
+          "id": "equipment-2",
+          "text": "Equipment: up to 400 EUR is approved; above 400 and up to 2000 EUR escalate to the manager; above 2000 EUR reject — it must go through procurement.",
+          "source": "Finance policy handbook, section 8 (revision 2)",
+          "confidence": "confirmed",
+          "since": 2
+        }
+      ]
+    },
+    {
+      "name": "Training",
+      "kind": "value",
+      "definition": "Courses and training. The expense says whether the employee's manager has approved it (manager_approved).",
+      "relations": [
+        {
+          "type": "is-a",
+          "target": "Category"
+        }
+      ],
+      "groundings": [
+        "expense-system-01.get_expense (manager_approved)"
+      ],
+      "rules": [
+        {
+          "id": "training-1",
+          "text": "Training: needs the manager_approved flag. With it, up to 1200 EUR is approved and above that escalated to the director; without it, rejected.",
+          "source": "Finance policy handbook, section 9 (revision 1)",
+          "confidence": "confirmed",
+          "since": 1
+        }
+      ]
+    }
+  ]
+}

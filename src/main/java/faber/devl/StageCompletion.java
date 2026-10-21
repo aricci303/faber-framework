@@ -5,7 +5,7 @@ import java.util.function.IntSupplier;
 
 /**
  * When is a stage over? When the queue has been emptied AND the agent has reported afterwards. "Afterwards"
- * must be measured against the exact moment the queue emptied (the baseline is captured by the expense
+ * must be measured against the exact moment the queue emptied (the baseline is captured by the case's
  * system's own hook), not against some earlier or later observation: an earlier version compared against a
  * baseline taken after the agent had already reported, so it never saw a new message and kept running idle
  * cycles. If the agent never reports, a short grace period ends the stage instead of waiting out the cap.
@@ -24,7 +24,7 @@ public final class StageCompletion implements BooleanSupplier {
     public StageCompletion(IntSupplier sentMessages, int graceCycles) { this(sentMessages, graceCycles, 0); }
     public StageCompletion(IntSupplier sentMessages, int graceCycles, int settleCycles) { this.sentMessages = sentMessages; this.grace = graceCycles; this.settle = settleCycles; }
 
-    /** Call from the expense system's queue-empty hook. Only the first call counts. */
+    /** Call from the case system's queue-empty hook. Only the first call counts. */
     public synchronized void queueEmptied() { if (sentWhenEmptied < 0) sentWhenEmptied = sentMessages.getAsInt(); }
 
     @Override public synchronized boolean getAsBoolean() {

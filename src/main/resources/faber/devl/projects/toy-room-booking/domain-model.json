@@ -1,0 +1,91 @@
+{
+ "id": "room-booking",
+ "title": "Northwind Studio: room booking, as the office manager and the domain experts keep it",
+ "versions": [
+  {
+   "id": "1",
+   "released": "2026-01-01",
+   "changes": [
+    "First release, from the office handbook, revision 1."
+   ]
+  },
+  {
+   "id": "2",
+   "released": "2026-10-01",
+   "changes": [
+    "Focus rooms: a booking is now limited to 1 hour (was 2)."
+   ]
+  }
+ ],
+ "concepts": [
+  {
+   "name": "Request",
+   "kind": "entity",
+   "definition": "A request to book a meeting room for a number of hours.",
+   "relations": [
+    {
+     "type": "is-a",
+     "target": "Booking"
+    }
+   ],
+   "groundings": [
+    "booking-system-01.get_request"
+   ],
+   "rules": []
+  },
+  {
+   "name": "Focus",
+   "kind": "value",
+   "definition": "A small room for one or two people to concentrate in.",
+   "relations": [
+    {
+     "type": "is-a",
+     "target": "Room"
+    }
+   ],
+   "groundings": [
+    "booking-system-01.get_request (room)"
+   ],
+   "rules": [
+    {
+     "id": "focus-1",
+     "text": "Focus room: a booking of up to 2 hours is granted; a longer one is refused.",
+     "source": "Office handbook, section 2 (revision 1)",
+     "confidence": "confirmed",
+     "since": 1,
+     "until": 2
+    },
+    {
+     "id": "focus-2",
+     "text": "Focus room: a booking of up to 1 hour is granted; a longer one is refused.",
+     "source": "Office handbook, section 2 (revision 2)",
+     "confidence": "confirmed",
+     "since": 2
+    }
+   ]
+  },
+  {
+   "name": "Workshop",
+   "kind": "value",
+   "definition": "A large room for a team session.",
+   "relations": [
+    {
+     "type": "is-a",
+     "target": "Room"
+    }
+   ],
+   "groundings": [
+    "booking-system-01.get_request (room)"
+   ],
+   "rules": [
+    {
+     "id": "workshop-1",
+     "text": "Workshop room: a booking of up to 4 hours is granted; a longer one is refused.",
+     "source": "Office handbook, section 3 (revision 1)",
+     "confidence": "confirmed",
+     "since": 1
+    }
+   ]
+  }
+ ]
+}

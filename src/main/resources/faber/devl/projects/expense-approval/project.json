@@ -1,0 +1,99 @@
+{
+ "id": "expense-approval",
+ "devlCase": "faber.devl.cases.expense.ExpenseDevlCase",
+ "previousIds": [
+  "expense"
+ ],
+ "title": "expense approval at Halden & Co.",
+ "itemIdPattern": "\\bE\\d{3}\\b",
+ "tutorTopics": [
+  {
+   "topic": "procedure",
+   "keywords": [
+    "procedure",
+    "precedence",
+    "sequence",
+    "order of",
+    "in what order",
+    "which order",
+    "check first",
+    "checks first"
+   ]
+  },
+  {
+   "topic": "receipts",
+   "keywords": [
+    "receipt"
+   ]
+  },
+  {
+   "topic": "duplicates",
+   "keywords": [
+    "duplicat"
+   ]
+  },
+  {
+   "topic": "meals",
+   "keywords": [
+    "meal",
+    "lunch",
+    "dinner",
+    "attendee"
+   ]
+  },
+  {
+   "topic": "flights",
+   "keywords": [
+    "flight",
+    "business class",
+    "economy",
+    "cabin"
+   ]
+  },
+  {
+   "topic": "lodging",
+   "keywords": [
+    "lodging",
+    "hotel",
+    "night"
+   ]
+  },
+  {
+   "topic": "software",
+   "keywords": [
+    "software",
+    "vendor",
+    "licen"
+   ]
+  },
+  {
+   "topic": "equipment",
+   "keywords": [
+    "equipment"
+   ]
+  },
+  {
+   "topic": "training",
+   "keywords": [
+    "training",
+    "course",
+    "manager_approved",
+    "manager approval"
+   ]
+  }
+ ],
+ "texts": {
+  "welcome": "Welcome to Halden & Co. Starting today you handle our employee expense approvals, working in the expense system.",
+  "organization": "Halden & Co.",
+  "jobSummary": "employee expense approvals in the expense system",
+  "company": "company",
+  "experts": "the finance team and the domain experts",
+  "item": "expense",
+  "items": "expenses",
+  "anItem": "an expense",
+  "itemParticulars": "their numbers, amounts, cases",
+  "rulesNoun": "approval rules",
+  "standard": "policy",
+  "tutorExample": "When should I escalate an expense?"
+ }
+}

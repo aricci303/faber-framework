@@ -1,0 +1,156 @@
+{
+  "domain": "Expense approval at Halden & Co.",
+  "note": "The eight rules of the company's approval policy as first released (layer 'rules') and the three that the policy change replaced (layer 'v2'), as keyword probes: an item is held by a text when the text contains every one of its facts (a number only as a whole number). Deliberately coarse: a prompt for review, not a verdict on understanding.",
+  "items": [
+    {
+      "id": "r-receipt",
+      "layer": "rules",
+      "label": "no receipt -> reject",
+      "facts": [
+        "receipt",
+        "reject"
+      ]
+    },
+    {
+      "id": "r-duplicate",
+      "layer": "rules",
+      "label": "duplicate -> reject",
+      "facts": [
+        "duplicate",
+        "reject"
+      ]
+    },
+    {
+      "id": "r-meals",
+      "layer": "rules",
+      "label": "meals: 40 / 90 with 2+ attendees",
+      "facts": [
+        "40",
+        "90",
+        "attend"
+      ]
+    },
+    {
+      "id": "r-flight",
+      "layer": "rules",
+      "label": "flights: 900, business 6h",
+      "facts": [
+        "900",
+        "business",
+        "director",
+        "manager"
+      ]
+    },
+    {
+      "id": "r-lodging",
+      "layer": "rules",
+      "label": "lodging: 180 per night",
+      "facts": [
+        "180",
+        "night",
+        "manager"
+      ]
+    },
+    {
+      "id": "r-software",
+      "layer": "rules",
+      "label": "software: approved vendors, 200",
+      "facts": [
+        "200",
+        "linden",
+        "quark"
+      ]
+    },
+    {
+      "id": "r-equipment",
+      "layer": "rules",
+      "label": "equipment: 500 / 2000",
+      "facts": [
+        "500",
+        "2000",
+        "procurement"
+      ]
+    },
+    {
+      "id": "r-training",
+      "layer": "rules",
+      "label": "training: manager approval, 1200",
+      "facts": [
+        "1200",
+        "director",
+        "approv"
+      ]
+    },
+    {
+      "id": "v2-meals",
+      "layer": "v2",
+      "label": "meals limits updated to 35 / 75",
+      "facts": [
+        "35",
+        "75"
+      ]
+    },
+    {
+      "id": "v2-software",
+      "layer": "v2",
+      "label": "approved vendors now include Orbit",
+      "facts": [
+        "orbit"
+      ]
+    },
+    {
+      "id": "v2-equipment",
+      "layer": "v2",
+      "label": "equipment limit updated to 400",
+      "facts": [
+        "400"
+      ]
+    }
+  ],
+  "change": {
+    "note": "What the change did to the rules, for the measurements by home, as ORDERED arrays (the order is what a report lists). 'unchanged': rules the change left alone. 'replaced': for each rule of layer 'rules' that the change replaced, 'by' (the item of layer 'v2' that states it now), 'oldFacts' (the facts that make up its OLD value: what a playbook that still states it as current would contain) and 'topic' (the words that say which rule a sentence is about).",
+    "unchanged": [
+      "r-receipt",
+      "r-duplicate",
+      "r-flight",
+      "r-lodging",
+      "r-training"
+    ],
+    "replaced": [
+      {
+        "rule": "r-meals",
+        "by": "v2-meals",
+        "oldFacts": [
+          "40",
+          "90"
+        ],
+        "topic": [
+          "meal"
+        ]
+      },
+      {
+        "rule": "r-software",
+        "by": "v2-software",
+        "oldFacts": [
+          "quark"
+        ],
+        "topic": [
+          "software",
+          "vendor",
+          "licen"
+        ]
+      },
+      {
+        "rule": "r-equipment",
+        "by": "v2-equipment",
+        "oldFacts": [
+          "500"
+        ],
+        "topic": [
+          "equipment",
+          "hardware"
+        ]
+      }
+    ]
+  }
+}

@@ -68,6 +68,7 @@ public final class NotebookArtifact extends Artifact {
 
     private final Map<String, String> previous = new LinkedHashMap<>();   // one level of history per key, for restore_note (safe mode)
 
+
     public NotebookArtifact(String id, Workspace workspace) {
         super(id, type, workspace);
     }

@@ -11,8 +11,6 @@ import java.nio.charset.StandardCharsets;
  * escaping), not in a string literal: a Java string constant is limited to 65,535 bytes in the class
  * file, and the prompt outgrew that. The text is loaded once, at class initialisation.
  *
- * Optional additions to the text, off by default, are switched on with -Dfaber.prompt.additions=A,B,... (see PromptAdditions).
- *
  * What follows the text is not static: the manuals of the four artifacts every agent is spawned with
  * are generated from the artifact classes, so they cannot drift from the operations that actually exist.
  */
@@ -20,7 +18,7 @@ public class SystemPrompt {
 
 	static final String RESOURCE = "system-prompt.md";
 
-	public static final String systemPrompt = PromptAdditions.apply(load(RESOURCE), System.getProperty("faber.prompt.additions", "")) + "\n"
+	public static final String systemPrompt = load(RESOURCE) + "\n"
 		+ faber.environment.WorkspaceArtifact.manual().toJson() + "\n"
 		+ faber.environment.UserConsoleArtifact.manual().toJson() + "\n"
 		+ faber.environment.AlarmArtifact.manual().toJson() + "\n"
