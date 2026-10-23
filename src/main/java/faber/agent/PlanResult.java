@@ -88,20 +88,20 @@ public final class PlanResult {
 
         static TriggerSpec parse(JSONObject t) {
             if (t == null) return null;
-            String condition = t.has("condition") ? (String) t.get("condition") : null;
-            String plannedAction = t.has("planned_action") ? (String) t.get("planned_action") : null;
-            String signalArtifactId = t.has("signal_artifact_id") ? (String) t.get("signal_artifact_id") : null;
-            String signalName = t.has("signal_name") ? (String) t.get("signal_name") : null;
+            String condition = optStr(t, "condition");
+            String plannedAction = optStr(t, "planned_action");
+            String signalArtifactId = optStr(t, "signal_artifact_id");
+            String signalName = optStr(t, "signal_name");
             java.util.List<String> signalNameAlternatives = new java.util.ArrayList<>();
-            if (t.has("signal_name_alternatives")) {
+            if (t.has("signal_name_alternatives") && !t.isNull("signal_name_alternatives")) {
                 JSONArray alts = t.getJSONArray("signal_name_alternatives");
                 for (int i = 0; i < alts.length(); i++) {
                     signalNameAlternatives.add(alts.getString(i));
                 }
             }
-            String signalValueContains = t.has("signal_value_contains") ? (String) t.get("signal_value_contains") : null;
-            String operationName = t.has("operation_name") ? (String) t.get("operation_name") : null;
-            boolean recurring = t.has("recurring") && t.getBoolean("recurring");
+            String signalValueContains = optStr(t, "signal_value_contains");
+            String operationName = optStr(t, "operation_name");
+            boolean recurring = t.optBoolean("recurring", false);
             return new TriggerSpec(condition, plannedAction, signalArtifactId, signalName,
                     signalNameAlternatives, signalValueContains, operationName, recurring);
         }
@@ -143,19 +143,19 @@ public final class PlanResult {
         }
 
         static IntentionEntry parse(JSONObject g) {
-            String goalId = (String) g.get("goal_id");
-            String goalDescription = g.has("goal_description") ? (String) g.get("goal_description") : null;
-            String plan = g.has("plan") ? (String) g.get("plan") : null;
-            GoalStatus status = g.has("status") ? GoalStatus.fromJsonValue((String) g.get("status")) : null;
-            String parentGoalId = g.has("parent_goal_id") ? (String) g.get("parent_goal_id") : null;
-            GoalKind goalKind = g.has("goal_kind") ? GoalKind.fromJsonValue((String) g.get("goal_kind")) : null;
+            String goalId = reqStr(g, "goal_id");
+            String goalDescription = optStr(g, "goal_description");
+            String plan = optStr(g, "plan");
+            GoalStatus status = GoalStatus.fromJsonValue(optStr(g, "status"));
+            String parentGoalId = optStr(g, "parent_goal_id");              // "parent_goal_id": null is how a goal with no parent is naturally written
+            GoalKind goalKind = GoalKind.fromJsonValue(optStr(g, "goal_kind"));
             TriggerSpec trigger = null;
-            if (g.has("pending_trigger")) {
+            if (g.has("pending_trigger") && !g.isNull("pending_trigger")) {
             	Object obj = g.get("pending_trigger");
             	if (obj instanceof JSONObject) {
             		trigger = TriggerSpec.parse(((JSONObject) obj));
             	} else {
-            		System.err.println("ERROR: pending_trigger is not a JSONObjecy");
+            		throw new IllegalStateException("the field \"pending_trigger\" must be an object, but it is " + typeName(obj) + ": " + obj);
             	}
             }
             return new IntentionEntry(goalId, goalDescription, plan, status, trigger, parentGoalId, goalKind);
@@ -163,6 +163,28 @@ public final class PlanResult {
     }
     
     public static final record ActionInfo(ActionKind kind, String goalId, JSONObject content) {}
+
+    // ---- a tolerant reader: what a less careful model may write, that is not wrong, is accepted; what is wrong is said precisely, as an IllegalStateException, which is what the architecture's retry-with-feedback acts on.
+
+    /** What kind of JSON value this is, for a message the model can act on (no angle brackets: a message is fed back into the context, and a literal tag in it was once taken for a real one). */
+    private static String typeName(Object v) {
+        return v == null || v == JSONObject.NULL ? "null" : v instanceof String ? "text" : v instanceof Number ? "a number" : v instanceof Boolean ? "true or false" : v instanceof JSONObject ? "an object" : v instanceof JSONArray ? "a list" : v.getClass().getSimpleName();
+    }
+
+    /** A text field that may be left out or written as an explicit null (both mean "not given"). Anything else that is not text is a format error, said precisely. */
+    static String optStr(JSONObject o, String key) {
+        if (!o.has(key) || o.isNull(key)) return null;
+        Object v = o.get(key);
+        if (v instanceof String) return (String) v;
+        throw new IllegalStateException("the field \"" + key + "\" must be text, but it is " + typeName(v) + ": " + String.valueOf(v));
+    }
+
+    /** A text field that must be there. */
+    static String reqStr(JSONObject o, String key) {
+        String s = optStr(o, key);
+        if (s == null) throw new IllegalStateException("the field \"" + key + "\" is required and it is missing or null: " + o);
+        return s;
+    }
 
     private final String stateOfMind;
     private final java.util.List<IntentionEntry> intentionChanges;
@@ -193,11 +215,22 @@ public final class PlanResult {
     private static final Pattern ACTIONS = Pattern.compile(
             "^\\s*<actions>(.*?)</actions>", Pattern.DOTALL | Pattern.MULTILINE);
 
+    /**
+     * Reads a model reply. Whatever is wrong with it is an IllegalStateException with a message the model can act on: that is what the architecture retries, with feedback. A failure of any other kind
+     * (a cast, a JSON accessor, an enum) used to end the whole run — "Model cannot be accessed" — and a less careful model, which writes an explicit null or a lower-case kind, met them at the first cycle.
+     */
     public static PlanResult parse(String rawModelOutput) {
-    	var som = parseStateOfMindBlock(rawModelOutput);
-        var intentionChanges = parseIntentionChangesBlock(rawModelOutput);
-        var actions = parseActionsBlock(rawModelOutput);
-        return new PlanResult(som, intentionChanges, actions);
+        try {
+            var som = parseStateOfMindBlock(rawModelOutput);
+            var intentionChanges = parseIntentionChangesBlock(rawModelOutput);
+            var actions = parseActionsBlock(rawModelOutput);
+            return new PlanResult(som, intentionChanges, actions);
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            String why = String.valueOf(e.getMessage()).replace('<', ' ').replace('>', ' ');
+            throw new IllegalStateException("the reply has a field of the wrong kind or shape (" + e.getClass().getSimpleName() + ": " + (why.length() > 300 ? why.substring(0, 300) + "…" : why) + ")", e);
+        }
     }
 
     private static String parseStateOfMindBlock(String rawModelOutput){
@@ -232,12 +265,16 @@ public final class PlanResult {
             } catch (Exception ex) {
                 throw new IllegalStateException("Actions array entry " + i + " is not a JSON object: " + actionsArr);
             }
-            Object kindRaw = parsed.get("kind");
-            if (kindRaw == null) {
+            if (!parsed.has("kind") || parsed.isNull("kind")) {
                 throw new IllegalStateException("Action JSON missing required \"kind\" field: " + parsed);
             }
-            ActionKind kind = ActionKind.valueOf(kindRaw.toString());
-            String actionGoalId = parsed.has("goal_id") ? parsed.getString("goal_id") : null;
+            String kindText = String.valueOf(parsed.get("kind")).trim();
+            ActionKind kind;
+            try { kind = ActionKind.valueOf(kindText.toUpperCase(java.util.Locale.ROOT)); }
+            catch (IllegalArgumentException ex) {
+                throw new IllegalStateException("Unknown action kind \"" + kindText + "\" — the kinds are " + java.util.Arrays.toString(ActionKind.values()) + ", written exactly so: " + parsed);
+            }
+            String actionGoalId = optStr(parsed, "goal_id");
             actions.add(new ActionInfo(kind, actionGoalId, parsed));
         }
 
@@ -256,7 +293,7 @@ public final class PlanResult {
         java.util.Set<String> focusOrStopTargets = new java.util.HashSet<>();
         for (ActionInfo a : actions) {
             if (a.kind() == ActionKind.FOCUS || a.kind() == ActionKind.STOP_OBSERVING) {
-                String targetId = a.content().has("artifact_id") ? a.content().getString("artifact_id") : null;
+                String targetId = optStr(a.content(), "artifact_id");
                 if (targetId != null && !focusOrStopTargets.add(targetId)) {
                     throw new IllegalStateException("FOCUS/STOP_OBSERVING both target artifact '" + targetId
                             + "' within the same actions array — decide once, per artifact, per batch.");
@@ -281,7 +318,9 @@ public final class PlanResult {
             throw new IllegalStateException("Model output's intention_changes section is malformed (not a valid JSON array): " + intentionChangesText);
         }
         for (int i = 0; i < intentionChangesArr.length(); i++) {
-            intentionChanges.add(IntentionEntry.parse(intentionChangesArr.getJSONObject(i)));
+            JSONObject entry = intentionChangesArr.optJSONObject(i);
+            if (entry == null) throw new IllegalStateException("The intention_changes entry " + i + " is not a JSON object (it is " + typeName(intentionChangesArr.get(i)) + "): " + intentionChangesArr);
+            intentionChanges.add(IntentionEntry.parse(entry));
         }
         return intentionChanges;
     }

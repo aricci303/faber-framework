@@ -206,6 +206,50 @@ public final class DevlPilotCheck {
             check("retry (" + stopCase + "): the model is told it was cut off only when it really was", stopCase.equals("max_tokens") ? cutOffNote : (ctx11.size() == 2 && !ctx11.get(1).contains("cut off")));
             w11.shutdown();
         }
+        // 11e. a less careful model: an explicit null, a lower-case kind, a wrong type or an unknown value never ends the run — what is harmless is read, what is wrong is an IllegalStateException the architecture retries with feedback
+        String okActs = "[{\"kind\":\"INVOKE\",\"artifact_id\":\"user-console-01\",\"operation_name\":\"send_msg_to_user\",\"parameters\":{\"text\":\"x\"},\"goal_id\":\"serve-user\"}]";
+        java.util.function.BiFunction<String, String, String> rep = (ic, ac) -> "<state_of_mind>x</state_of_mind>\n<intention_changes>\n" + ic + "\n</intention_changes>\n<actions>\n" + ac + "\n</actions>";
+        var nulls = faber.agent.PlanResult.parse(rep.apply("[{\"goal_id\":\"g1\",\"goal_description\":\"d\",\"plan\":\"p\",\"status\":null,\"parent_goal_id\":null,\"goal_kind\":null,\"pending_trigger\":null}]", okActs)).getIntentionChanges().get(0);
+        var trig = faber.agent.PlanResult.parse(rep.apply("[{\"goal_id\":\"g1\",\"pending_trigger\":{\"condition\":null,\"planned_action\":null,\"signal_artifact_id\":null,\"signal_name\":null,\"signal_name_alternatives\":null,\"signal_value_contains\":null,\"operation_name\":null,\"recurring\":null}}]", okActs)).getIntentionChanges().get(0);
+        var lower = faber.agent.PlanResult.parse(rep.apply("[{\"goal_id\":\"g1\",\"status\":\" Achieved \",\"goal_kind\":\"Maintenance\"}]", okActs.replace("INVOKE", "invoke")));
+        check("an explicit null is read as 'not given' — the parent of a top-level goal written as \"parent_goal_id\": null, a null status, kind or trigger, null fields inside a trigger — which is what ended the first run of a cheaper model at its first cycle (a cast of the null to text); letter case of the enumerated values and a stray space are harmless and read",
+              nulls.goalId.equals("g1") && nulls.parentGoalId == null && nulls.status == null && nulls.goalKind == null && nulls.trigger == null && nulls.plan.equals("p") && trig.trigger != null && !trig.trigger.recurring
+              && lower.getIntentionChanges().get(0).status == faber.agent.GoalStatus.ACHIEVED && lower.getIntentionChanges().get(0).goalKind == faber.agent.GoalKind.MAINTENANCE && lower.getActions().get(0).kind() == faber.agent.PlanResult.ActionKind.INVOKE);
+        String[][] bad = {
+            { "[{\"plan\":\"p\"}]", okActs, "\"goal_id\" is required" }, { "[{\"goal_id\":5}]", okActs, "\"goal_id\" must be text, but it is a number" }, { "[{\"goal_id\":\"g\",\"plan\":7}]", okActs, "\"plan\" must be text" },
+            { "[{\"goal_id\":\"g\",\"status\":\"active\"}]", okActs, "Unknown goal status \"active\" — the only values are \"achieved\" and \"dropped\"" }, { "[{\"goal_id\":\"g\",\"goal_kind\":\"x\"}]", okActs, "Unknown goal kind \"x\"" },
+            { "[\"g1\"]", okActs, "entry 0 is not a JSON object" }, { "[{\"goal_id\":\"g\",\"pending_trigger\":\"soon\"}]", okActs, "\"pending_trigger\" must be an object" },
+            { "[]", "[{\"artifact_id\":\"user-console-01\"}]", "missing required \"kind\"" }, { "[]", "[{\"kind\":\"dance\"}]", "Unknown action kind \"dance\" — the kinds are [" }, { "[]", "[{\"kind\":\"WAIT\",\"goal_id\":3}]", "\"goal_id\" must be text" },
+            { "[]", "[\"x\"]", "entry 0 is not a JSON object" } };
+        List<String> badProblems = new ArrayList<>();
+        for (String[] b : bad) {
+            try { faber.agent.PlanResult.parse(rep.apply(b[0], b[1])); badProblems.add("accepted: " + b[2]); }
+            catch (IllegalStateException e) { if (e.getClass() != IllegalStateException.class || !e.getMessage().contains(b[2].replace("entry 0", "entry 0"))) badProblems.add("wrong message for " + b[2] + ": " + e.getMessage()); if (e.getMessage().matches("(?s).*</?[a-z_]+>.*")) badProblems.add("a tag in the message: " + e.getMessage()); }
+            catch (RuntimeException e) { badProblems.add("ESCAPES THE RETRY (" + e.getClass().getSimpleName() + "): " + b[2]); }
+        }
+        check("everything that is wrong with a reply is an IllegalStateException with a message the model can act on — the field and what it must be, the values that exist, the entry that is not an object — and never a cast, a JSON accessor or an enum failure, which ended the run: " + badProblems, badProblems.isEmpty() && bad.length == 11);
+        java.util.List<String> ctx11e = new ArrayList<>(); int[] call11e = {0};
+        Workspace w11e = new Workspace(); w11e.initDefaultArtifacts();
+        Agent a11e = new Agent("agent-11e", new LlmClient() { public LlmCallResult plan(String sys, String ctx) { ctx11e.add(ctx);
+            return call11e[0]++ == 0 ? new LlmCallResult(rep.apply("[{\"goal_id\":\"g1\",\"goal_description\":\"d\",\"status\":\"active\"}]", okActs), 1, 5, 0, 22063, "end_turn") : new LlmCallResult(okOut, 1, 5, 0, 22063, "end_turn"); } }, new SeedGoal("serve-user", "Serve the user."));
+        a11e.init(w11e);
+        java.io.ByteArrayOutputStream cap11e = new java.io.ByteArrayOutputStream(); java.io.PrintStream keep11e = System.out; System.setOut(new java.io.PrintStream(cap11e, true, "UTF-8"));
+        String died11e = ""; try { a11e.doYourJobAndSelfEvaluate(1); } catch (RuntimeException e) { died11e = e.toString(); } finally { System.setOut(keep11e); }
+        check("with the real agent loop, an unknown goal status is retried with a note that says what was wrong and what the values are, and the cycle completes on the second reply (before: 'Model cannot be accessed', the run aborted): no exception, one retry, the note carries the specific message",
+              died11e.isEmpty() && ctx11e.size() == 2 && cap11e.toString("UTF-8").contains("[RETRY] cycle") && ctx11e.get(1).contains("Unknown goal status \"active\"") && ctx11e.get(1).contains("\"achieved\" and \"dropped\""));
+        w11e.shutdown();
+        // 11f. an agent waiting for something that will not come — a reply from a user who does not answer — has failed the stage: it is not waited out to the cap
+        var waitPlan = faber.agent.PlanResult.parse(rep.apply("[]", "[{\"kind\":\"WAIT\"}]")); var doPlan = faber.agent.PlanResult.parse(rep.apply("[]", okActs));
+        long[] cycleNo = {0}; faber.agent.AgentArchitecture.CycleResult[] cur = {null};
+        java.util.function.BiConsumer<faber.agent.PlanResult, java.util.List<faber.agent.Percept>> cycle = (pl, pc) -> cur[0] = new faber.agent.AgentArchitecture.CycleResult(++cycleNo[0], pc, "", pl, null, null, null, null, null);
+        StallDetector sd = new StallDetector(() -> cur[0], 6);
+        boolean none0 = sd.getAsBoolean(); List<Boolean> seq = new ArrayList<>();
+        for (int i = 0; i < 5; i++) { cycle.accept(waitPlan, java.util.List.of()); seq.add(sd.getAsBoolean()); sd.getAsBoolean(); }      // five idle cycles, each looked at twice: five, not ten
+        cycle.accept(doPlan, java.util.List.of()); boolean afterAction = sd.getAsBoolean();                                             // it did something: the run of idle cycles starts again
+        for (int i = 0; i < 5; i++) { cycle.accept(waitPlan, java.util.List.of()); seq.add(sd.getAsBoolean()); }
+        boolean notYet = !sd.stalled(); cycle.accept(waitPlan, java.util.List.of()); boolean sixth = sd.getAsBoolean();
+        check("the stall rule: six cycles in a row with no new percept and only WAIT; five are not a stall, an action breaks the run, the same cycle looked at twice counts once, and once stalled it stays so; nothing before the first cycle",
+              !none0 && seq.stream().noneMatch(b -> b) && !afterAction && notYet && sixth && sd.stalled() && sd.endedBy().startsWith("stalled: 6 cycles in a row with nothing new and nothing done") && StallDetector.LIMIT == 6 && !StallDetector.idle(null));
         // 11d. a crashing run still yields a partial result and ends cleanly (it used to leave only a stack trace and a hung JVM)
         java.nio.file.Path ab = java.nio.file.Files.createTempDirectory("devl-abort");
         int[] calls11 = {0};
@@ -321,7 +365,7 @@ public final class DevlPilotCheck {
 
         // ---- 12. the framework does not know any case: no class of it refers to one, and the texts it holds contain no word of a domain
         List<String> impure = new ArrayList<>();
-        for (String cn : List.of("DevlRunner", "Playbook", "PlaybookSnapshot", "Homes", "Consolidation", "RuleReference", "ChangeAnalysis", "AssessmentMetrics", "StageCompletion", "RunLog", "TutorArtifact",
+        for (String cn : List.of("DevlRunner", "Playbook", "PlaybookSnapshot", "Homes", "Consolidation", "RuleReference", "ChangeAnalysis", "AssessmentMetrics", "StageCompletion", "StallDetector", "DebriefCompletion", "RunLog", "TutorArtifact",
                                  "CuratedModelArtifact", "TaskLibraryArtifact", "PlaybookArtifact", "PlaybookWatch", "CaseData", "Projects", "DevlLearningMain", "DevlAssessmentMain", "DevlOperationMain", "Messages", "CaseContract", "CheckKit", "DevlCase", "CaseWorld", "WorkItem", "Outcome", "Feedback", "StageKey")) {
             try (var in = DevlPilotCheck.class.getResourceAsStream("/faber/devl/" + cn + ".class")) {
                 if (in == null || new String(in.readAllBytes(), java.nio.charset.StandardCharsets.ISO_8859_1).contains("faber/devl/cases")) impure.add(cn);
@@ -703,6 +747,22 @@ public final class DevlPilotCheck {
         @SuppressWarnings("unchecked") PlaybookSnapshot candGE = PlaybookSnapshot.read(((List<java.nio.file.Path>) rcE[2]).get(0));
         check("the consolidation follows the same rule: an instance that sends a progress message and writes the revision in the next cycle produces the candidate with that revision (it used to be cut off at the message and produce a candidate that was the parent), and the result says 'agent reported and revised the playbook'",
               candGE.text().equals(TPB + " (consolidated after a progress message)") && ((String) rcE[1]).contains("ended by: agent reported and revised the playbook") && candGE.manifest.getJSONObject("lineage").getBoolean("playbook_revised"));
+
+        // ---- 17f. a stalled stage (see 11f), end to end
+        // A WAIT cycle blocks for up to 30 s while it waits for an event (a constant of the architecture), so a stalled stage of six idle cycles takes about three minutes: this check is opt-in (-Dfaber.devl.slowChecks=true).
+        if (Boolean.getBoolean("faber.devl.slowChecks")) {
+        boolean[] stallMode = {false};
+        Brain brainStall = (ctx, w) -> {
+            if (ctx.contains("start your playbook") || ctx.contains("bring your playbook up to date")) { stallMode[0] = false; return brainLT.act(ctx, w); }
+            if (!stallMode[0] && ctx.contains("Stage 2")) { stallMode[0] = true; return new JSONArray().put(say("Where are the rules kept? I will wait for your answer.")).toString(); }
+            if (stallMode[0]) return "[{\"kind\":\"WAIT\"}]";
+            return brainLT.act(ctx, w); };
+        Object[] rsE = run(new String[] { "--project=toy-room-booking", "--phase=learning" }, brainStall);
+        String resSE = (String) rsE[1];
+        java.util.regex.Matcher mSE = java.util.regex.Pattern.compile("stage2-policy\\s+(\\d+)\\s.*?ended by: stalled").matcher(resSE.replace("\n", " "));
+        check("end to end, a stage in which the agent asks the user a question and only waits ends as 'stalled' after the idle cycles, not at the cap of the stage, and the run goes on: the next stage and the debriefs happen and the result is written; the stage is not marked as complete",
+              resSE.contains("ended by: stalled: 6 cycles in a row with nothing new and nothing done") && resSE.contains("debrief after stage2-policy") && resSE.contains("stage3-less-support") && !resSE.contains("RUN ABORTED") && (resSE.contains("stage2-policy") && resSE.indexOf("stalled") < resSE.indexOf("stage3-less-support")));
+        } else System.out.println("SKIP  end to end, a stalled stage ends as 'stalled' and the run goes on (slow: about 3 minutes; run with -Dfaber.devl.slowChecks=true)");
 
         // ---- 17d. the agent's model is a launch parameter, and what a run records: the log, the result, the snapshot, its provenance, the candidate
         check("the model of the agent is chosen by the launch, not by the code: the architecture's own choice stands unless a model id is named (-Dfaber.llm.model, or the tool's --llm-model); a blank name changes nothing; any id the API knows works, including ones the SDK has no constant for",

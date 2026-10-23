@@ -28,10 +28,10 @@ public enum GoalStatus {
      *  preserving "no status update this turn" as distinct from any real status value. */
     public static GoalStatus fromJsonValue(String raw) {
         if (raw == null) return null;
-        switch (raw) {
+        switch (raw.trim().toLowerCase(java.util.Locale.ROOT)) {
             case "achieved": return ACHIEVED;
             case "dropped": return DROPPED;
-            default: throw new IllegalArgumentException("Unknown goal status in model output: " + raw);
+            default: throw new IllegalStateException("Unknown goal status \"" + raw + "\" — the only values are \"achieved\" and \"dropped\"; leave the field out while the goal is still being pursued");
         }
     }
 

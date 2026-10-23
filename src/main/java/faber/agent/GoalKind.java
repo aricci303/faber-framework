@@ -46,10 +46,10 @@ public enum GoalKind {
      *  default for a goal nobody has classified, not a classification the model can choose. */
     public static GoalKind fromJsonValue(String raw) {
         if (raw == null) return null;
-        switch (raw) {
+        switch (raw.trim().toLowerCase(java.util.Locale.ROOT)) {
             case "achievement": return ACHIEVEMENT;
             case "maintenance": return MAINTENANCE;
-            default: throw new IllegalArgumentException("Unknown goal kind in model output: " + raw);
+            default: throw new IllegalStateException("Unknown goal kind \"" + raw + "\" — the only values are \"achievement\" and \"maintenance\"");
         }
     }
 

@@ -330,10 +330,14 @@ public final class DevlRunner {
                 if (consolidationStage && playbook != null) watchConsol[0] = pbArt.summary(true);
                 // The consolidation stage has no queue: it ends when the agent has reported AND revised the playbook (capped at 15 cycles); an agent that reports without writing gets a few more cycles (DebriefCompletion).
                 DebriefCompletion consolidationDone = new DebriefCompletion(console::sentMessageCount, msgsAtStart, pbArt::revisionsThisSession, pbArt.revisionsThisSession(), DebriefCompletion.SETTLE, 2000, 2000);
-                java.util.function.BooleanSupplier stop = consolidationStage ? consolidationDone : done;
+                java.util.function.BooleanSupplier base = consolidationStage ? consolidationDone : done;
+                // an agent waiting for something that will not come (a reply from a user who does not answer) has failed the stage: it is not waited out to the cap. Off with a human tutor, who may well be answering.
+                StallDetector stall = new StallDetector(agent::getLastCycleResult, StallDetector.LIMIT);
+                boolean watchStall = !"human".equals(o.tutor) && !consolidationStage;
+                java.util.function.BooleanSupplier stop = watchStall ? () -> { boolean over = base.getAsBoolean(), stuck = stall.getAsBoolean(); return over || stuck; } : base;
                 int cycles = agent.doYourJobAndSelfEvaluate(consolidationStage ? Math.min(o.maxCycles, 15) : o.maxCycles, stop);
                 if (consolidationStage) for (int w = 0; w < 20 && java.util.Objects.equals(playbookAtStart == null ? null : playbookAtStart.strip(), playbookOf(workspace) == null ? null : playbookOf(workspace).strip()); w++) Thread.sleep(50);
-                String endedBy = consolidationStage ? (consolidationDone.reported() ? consolidationDone.endedBy() : "no report after " + cycles + " cycles") : done.endedBy();
+                String endedBy = consolidationStage ? (consolidationDone.reported() ? consolidationDone.endedBy() : "no report after " + cycles + " cycles") : (watchStall && stall.stalled() ? stall.endedBy() : done.endedBy());
                 if (st.phase == LifePhase.ASSESSMENT) assessedResults.put(st.label, world.correctCount() + "/" + st.items.size());
                 totalCycles += cycles;
                 learningRows.put(new JSONObject().put("stage", st.label).put("cycles", cycles).put("correct", world.correctCount() + "/" + st.items.size()).put("tutor_asks", tutor.askCount(st.label)));
