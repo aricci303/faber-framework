@@ -10,7 +10,7 @@
 | `domain-model.json` | the curated model `expense-approval`: 13 concepts and 8 rules, each with its source (a finance policy handbook section) and the versions it applies in; version 2 changes the rules for meals, software and equipment |
 | `rules-reference.json` | the probes for the 8 rules and the three that the change replaced (with their old values) |
 | `task-library.json` | one task (process the pending expenses) and two plans of the project's own (check for duplicates; one way through a queue); the framework adds five |
-| `report-fixtures.json` | 17 real reports of drift probes, labelled by hand, for `ExpenseCaseCheck` (it pins the disclosure metric); not read by a run |
+| `report-fixtures.json` | 20 real reports of drift probes, labelled by hand, for `ExpenseCaseCheck` (it pins the disclosure metric); not read by a run |
 
 ## The code
 

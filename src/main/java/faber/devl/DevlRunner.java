@@ -328,13 +328,12 @@ public final class DevlRunner {
                 world.setOnQueueEmpty(done::queueEmptied);
                 final int msgsAtStart = msgsBefore; final String playbookAtStart = consolidationStage ? playbookOf(workspace) : null;
                 if (consolidationStage && playbook != null) watchConsol[0] = pbArt.summary(true);
-                // The consolidation stage has no queue: it ends when the agent has reported (capped at 15 cycles). Operations run asynchronously, so give the batch that reported 2 s to land.
-                java.util.function.BooleanSupplier stop = consolidationStage
-                        ? () -> { try { for (int w = 0; w < 40; w++) { if (console.sentMessageCount() > msgsAtStart) return true; Thread.sleep(50); } } catch (InterruptedException ie) { Thread.currentThread().interrupt(); } return false; }
-                        : done;
+                // The consolidation stage has no queue: it ends when the agent has reported AND revised the playbook (capped at 15 cycles); an agent that reports without writing gets a few more cycles (DebriefCompletion).
+                DebriefCompletion consolidationDone = new DebriefCompletion(console::sentMessageCount, msgsAtStart, pbArt::revisionsThisSession, pbArt.revisionsThisSession(), DebriefCompletion.SETTLE, 2000, 2000);
+                java.util.function.BooleanSupplier stop = consolidationStage ? consolidationDone : done;
                 int cycles = agent.doYourJobAndSelfEvaluate(consolidationStage ? Math.min(o.maxCycles, 15) : o.maxCycles, stop);
                 if (consolidationStage) for (int w = 0; w < 20 && java.util.Objects.equals(playbookAtStart == null ? null : playbookAtStart.strip(), playbookOf(workspace) == null ? null : playbookOf(workspace).strip()); w++) Thread.sleep(50);
-                String endedBy = consolidationStage ? (console.sentMessageCount() > msgsAtStart ? "agent reported" : "no report after " + cycles + " cycles") : done.endedBy();
+                String endedBy = consolidationStage ? (consolidationDone.reported() ? consolidationDone.endedBy() : "no report after " + cycles + " cycles") : done.endedBy();
                 if (st.phase == LifePhase.ASSESSMENT) assessedResults.put(st.label, world.correctCount() + "/" + st.items.size());
                 totalCycles += cycles;
                 learningRows.put(new JSONObject().put("stage", st.label).put("cycles", cycles).put("correct", world.correctCount() + "/" + st.items.size()).put("tutor_asks", tutor.askCount(st.label)));
@@ -361,13 +360,16 @@ public final class DevlRunner {
                         + world.correctCount() + "/" + st.items.size() + " correct; ended by: " + endedBy);
 
                 if (st.debrief != null) {
-                    int before = console.sentMessageCount();
+                    int before = console.sentMessageCount(), revsBefore = pbArt.revisionsThisSession();
+                    DebriefCompletion debriefDone = new DebriefCompletion(console::sentMessageCount, before, pbArt::revisionsThisSession, revsBefore, DebriefCompletion.SETTLE, 0, 2000);      // reported AND written, not merely reported
                     console.simulateIncomingMessage(st.debrief);
-                    int dc = agent.doYourJobAndSelfEvaluate(14, () -> console.sentMessageCount() > before);
-                    System.out.println("[devl " + RunLog.now() + "] debrief after " + st.label + " took " + dc + " cycles");
+                    int dc = agent.doYourJobAndSelfEvaluate(14, debriefDone);
+                    int revisedInDebrief = pbArt.revisionsThisSession() - revsBefore;
+                    System.out.println("[devl " + RunLog.now() + "] debrief after " + st.label + " took " + dc + " cycles; ended by: " + debriefDone.endedBy());
                     String now = playbookOf(workspace);
                     for (int w = 0; w < 20 && (now == null || now.strip().equals(prevPlaybook[0] == null ? "" : prevPlaybook[0].strip())); w++) { Thread.sleep(50); now = playbookOf(workspace); }   // written in the batch that reported
-                    report.add("  debrief after " + st.label + ": " + dc + " cycles");
+                    report.add("  debrief after " + st.label + ": " + dc + " cycles; ended by: " + debriefDone.endedBy());
+                    report.add("  debrief after " + st.label + ": the agent revised the playbook " + revisedInDebrief + " time(s) in this debrief" + (revisedInDebrief == 0 ? " — NOT revised: the playbook stands as it was; if the agent's last message promised a new version, it was not written" : ""));
                     for (String line : Playbook.debriefLines(st.label, now, prevPlaybook[0], reference)) { report.add(line); System.out.println("[devl " + RunLog.now() + "] " + line.strip()); }
                     for (String line : Homes.lines("after debrief " + st.label, Homes.measure(reference, now, model.ruleTexts(), "1"))) { report.add(line); System.out.println("[devl " + RunLog.now() + "] " + line.strip()); }
                     prevPlaybook[0] = now;

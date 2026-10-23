@@ -665,6 +665,45 @@ public final class DevlPilotCheck {
               && resAW.contains("knowledge by home at the end of A2a (world version 2; keyword probes): the model 2/2 | the playbook 0/2") && resAW.contains("the consolidation started from: THE PARENT'S TEXT.") && !resAW.contains("WARNING — the playbook is not the parent's text")
               && lw.getInt("revisions_refused") == 1 && lw.getJSONArray("attempts_refused").getJSONObject(0).getInt("chars") == INSTANCE_NOTE.length() && lw.getBoolean("started_from_parent") && lw.getBoolean("unchanged") && candAW.text().equals(TPB + " I check the version of the domain model before I trust a limit."));
 
+        // ---- 17e. a debrief or a consolidation is over when the agent has REPORTED AND WRITTEN the playbook, not when it has merely reported (a progress message used to end it before the playbook was written)
+        java.util.concurrent.atomic.AtomicInteger sentX = new java.util.concurrent.atomic.AtomicInteger(5), revsX = new java.util.concurrent.atomic.AtomicInteger(2);
+        DebriefCompletion dcA = new DebriefCompletion(sentX::get, 5, revsX::get, 2, 3, 0, 0), dcB = new DebriefCompletion(sentX::get, 5, revsX::get, 2, 3, 0, 0);
+        boolean noReport = dcA.getAsBoolean() || dcA.getAsBoolean(); sentX.incrementAndGet();                         // a report is a message sent after the debrief began
+        boolean dw1 = dcA.getAsBoolean(), dw2 = dcA.getAsBoolean(), dw3 = dcA.getAsBoolean(); revsX.incrementAndGet(); boolean dlanded = dcA.getAsBoolean();    // reported, not written: three cycles; then it writes
+        DebriefCompletion dcC = new DebriefCompletion(sentX::get, 5, revsX::get, 3, 3, 0, 0); boolean dc1 = dcC.getAsBoolean(), dc2 = dcC.getAsBoolean(), dc3 = dcC.getAsBoolean(), dc4 = dcC.getAsBoolean();       // reported and never writes: over at the fourth evaluation
+        check("the debrief completion: not over before the agent reports; a report without a revision does NOT end it — the agent is given three more cycles to write what its report may have promised — and a revision in those cycles ends it at once; an agent that reports and never writes is let go at the fourth evaluation, and the end says so; a revision made BEFORE the stage began (the baseline) counts for nothing",
+              !noReport && !dw1 && !dw2 && !dw3 && dlanded && dcA.revised() && dcA.endedBy().equals("agent reported and revised the playbook") && !dc1 && !dc2 && !dc3 && dc4 && !dcC.revised() && dcC.reported() && dcC.cyclesAfterReportWithoutWriting() == 4
+              && dcC.endedBy().equals("agent reported; the playbook was not revised, after 3 more cycles") && !new DebriefCompletion(sentX::get, 6, revsX::get, 0, 3, 0, 0).getAsBoolean() && DebriefCompletion.SETTLE == 3);
+        boolean[] promisedE = {false}; int[] verE = {0};
+        Brain brainProgress = (ctx, w) -> {
+            if (ctx.contains("start your playbook") || ctx.contains("bring your playbook up to date")) { promisedE[0] = true; return new JSONArray().put(say("Reorganised my notes. Next I will write the new version of my playbook.")).toString(); }      // a PROGRESS message: it promises, and does not write
+            if (promisedE[0]) { promisedE[0] = false; verE[0]++; return new JSONArray().put(revise(TPB + " (written after a progress message " + verE[0] + ")")).put(say("written")).toString(); }
+            if (((BookingSystemArtifact) w).pendingIds().isEmpty()) return blindToy(w, "done");
+            return blindToy(w, "x"); };
+        Object[] rgE = run(new String[] { "--project=toy-room-booking", "--phase=learning" }, brainProgress);
+        String resGE = (String) rgE[1]; @SuppressWarnings("unchecked") List<java.nio.file.Path> pbGE = (List<java.nio.file.Path>) rgE[2]; PlaybookSnapshot snapGE = PlaybookSnapshot.read(pbGE.get(0));
+        check("end to end, the agent that sends a progress message and writes the playbook in the NEXT cycle is no longer cut off: all three debriefs end 'agent reported and revised the playbook', the playbook is revised once in each (the result says so), each debrief took two cycles, and the release snapshot is the text written after the last progress message",
+              resGE.contains("debrief after stage1-introduction: 2 cycles; ended by: agent reported and revised the playbook") && resGE.contains("debrief after stage3-less-support: 2 cycles; ended by: agent reported and revised the playbook") && resGE.contains("debrief after stage2-policy: the agent revised the playbook 1 time(s) in this debrief")
+              && !resGE.contains("NOT revised") && verE[0] == 3 && snapGE.text().equals(TPB + " (written after a progress message 3)"));
+        Brain brainPromise = (ctx, w) -> {
+            if (ctx.contains("start your playbook") || ctx.contains("bring your playbook up to date")) return new JSONArray().put(say("I will write it later.")).toString();         // it reports and never writes
+            if (((BookingSystemArtifact) w).pendingIds().isEmpty()) return blindToy(w, "done");
+            return blindToy(w, "x"); };
+        Object[] rhE = run(new String[] { "--project=toy-room-booking", "--phase=learning" }, brainPromise);
+        String resHE = (String) rhE[1];
+        check("an agent that reports and never writes is not made to: each debrief ends after the extra cycles with 'the playbook was not revised', and the result says in plain words that it was NOT revised and that, if the agent's last message promised a new version, it was not written — so that 'UNCHANGED' is never read as 'nothing to change'",
+              resHE.contains("ended by: agent reported; the playbook was not revised, after 3 more cycles") && resHE.contains("the agent revised the playbook 0 time(s) in this debrief \u2014 NOT revised: the playbook stands as it was; if the agent's last message promised a new version, it was not written") && resHE.contains("NONE"));
+        // the consolidation: the same rule
+        boolean[] promisedC = {false};
+        Brain brainConsProgress = (ctx, w) -> {
+            if (ctx.contains("The assessment is over")) { promisedC[0] = true; return new JSONArray().put(say("Going through what I saw first; I will write the new version next.")).toString(); }
+            if (promisedC[0]) { promisedC[0] = false; return new JSONArray().put(revise(TPB + " (consolidated after a progress message)")).put(say("written")).toString(); }
+            return DevlPilotCheck.blindToy(w, "All done."); };
+        Object[] rcE = run(new String[] { "--project=toy-room-booking", "--phase=assessment", "--playbook=" + pbLT.get(0), "--consolidate" }, brainConsProgress);
+        @SuppressWarnings("unchecked") PlaybookSnapshot candGE = PlaybookSnapshot.read(((List<java.nio.file.Path>) rcE[2]).get(0));
+        check("the consolidation follows the same rule: an instance that sends a progress message and writes the revision in the next cycle produces the candidate with that revision (it used to be cut off at the message and produce a candidate that was the parent), and the result says 'agent reported and revised the playbook'",
+              candGE.text().equals(TPB + " (consolidated after a progress message)") && ((String) rcE[1]).contains("ended by: agent reported and revised the playbook") && candGE.manifest.getJSONObject("lineage").getBoolean("playbook_revised"));
+
         // ---- 17d. the agent's model is a launch parameter, and what a run records: the log, the result, the snapshot, its provenance, the candidate
         check("the model of the agent is chosen by the launch, not by the code: the architecture's own choice stands unless a model id is named (-Dfaber.llm.model, or the tool's --llm-model); a blank name changes nothing; any id the API knows works, including ones the SDK has no constant for",
               faber.agent.LlmClient.AnthropicLlmClient.resolveModelId("claude-sonnet-5", null).equals("claude-sonnet-5") && faber.agent.LlmClient.AnthropicLlmClient.resolveModelId("claude-sonnet-5", "").equals("claude-sonnet-5") && faber.agent.LlmClient.AnthropicLlmClient.resolveModelId("claude-sonnet-5", "  ").equals("claude-sonnet-5")
