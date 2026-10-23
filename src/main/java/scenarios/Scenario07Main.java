@@ -54,7 +54,11 @@ public final class Scenario07Main {
         MessagingArtifact messaging = new MessagingArtifact("messaging-01", workspace);
         workspace.provision("messaging-01", "MessagingApp", messaging);
 
-        Agent agent = new Agent("agent-0", new SeedGoal("serve-user",
+        faber.agent.LlmProfile profile = ProfileParser.fetchProfile(args);
+        System.out.println("[faber] llm profile: " + profile.name + " (" + profile.provider + ", model " + profile.modelId + "), prompt " + profile.promptId());
+        System.out.println("[faber] llm: " + profile.describeSettings());
+
+        Agent agent = new Agent("agent-0", profile, new SeedGoal("serve-user",
                 "Serve the user's requests as they arise, remaining available and responsive by default."));
         // agent.enableCycleDumpLogging(false);
         agent.init(workspace);

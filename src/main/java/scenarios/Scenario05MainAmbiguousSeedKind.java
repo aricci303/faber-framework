@@ -49,7 +49,11 @@ public final class Scenario05MainAmbiguousSeedKind {
         FlightBookingArtifact flights = new FlightBookingArtifact("flight-01", workspace);
         workspace.provision("flight-01", "FlightBooking", flights);
 
-        Agent agent = new Agent("agent-0", new SeedGoal("track-preferences",
+        faber.agent.LlmProfile profile = ProfileParser.fetchProfile(args);
+        System.out.println("[faber] llm profile: " + profile.name + " (" + profile.provider + ", model " + profile.modelId + "), prompt " + profile.promptId());
+        System.out.println("[faber] llm: " + profile.describeSettings());
+
+        Agent agent = new Agent("agent-0", profile, new SeedGoal("track-preferences",
                 "Keep track of any standing preferences this user mentions — for example, seat or "
                 + "hotel preferences — and make sure every future booking made on their behalf "
                 + "reflects them."));

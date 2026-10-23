@@ -1,6 +1,7 @@
 package scenarios;
 
 import faber.agent.Agent;
+import faber.agent.LlmProfiles;
 import faber.agent.SeedGoal;
 import faber.environment.Workspace;
 
@@ -11,7 +12,9 @@ import faber.environment.Workspace;
  */
 public final class Scenario01Main {
 
-    public static void main(String[] args) throws Exception {
+	
+
+	public static void main(String[] args) throws Exception {
         System.setOut(new java.io.PrintStream(System.out, true, "UTF-8"));
 
         Workspace workspace = new Workspace();
@@ -21,7 +24,12 @@ public final class Scenario01Main {
         Counter counter01 = new Counter("counter-01", workspace, 0);
         workspace.provision("counter-01", "Counter", counter01);
 
-        Agent agent = new Agent("agent-0", new SeedGoal("serve-user",
+               
+        faber.agent.LlmProfile profile = ProfileParser.fetchProfile(args);
+        System.out.println("[faber] llm profile: " + profile.name + " (" + profile.provider + ", model " + profile.modelId + "), prompt " + profile.promptId());
+        System.out.println("[faber] llm: " + profile.describeSettings());
+
+        Agent agent = new Agent("agent-0", profile, new SeedGoal("serve-user",
                 "Serve the user's requests as they arise, remaining available and responsive by default."));
         agent.init(workspace);
         // agent.enableCycleDumpLogging(false);
@@ -38,5 +46,6 @@ public final class Scenario01Main {
         workspace.shutdown();
 
     }
+	
 }
 

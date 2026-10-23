@@ -58,32 +58,38 @@ public interface LlmClient {
 	
 	LlmCallResult plan(String systemPrompt, String context) throws IOException, InterruptedException;
 
+	/** The model this client talks to, for a run's records ("unknown" for a client that does not say, such as a scripted one). */
+	default String modelId() { return "unknown"; }
+
     /** Minimal real implementation against the Anthropic Messages API. Swap naive JSON handling for a real library beyond a sketch. */
     
     final class AnthropicLlmClient implements LlmClient {
+        private final LlmProfile profile;
         private final Model model;
-        private AnthropicClient client;
-        
-        /** The id of the model this JVM's Anthropic client was built with (see resolveModelId), "" before one exists: what a run records, so that a result is never separated from the model that made it. */
+        private final AnthropicClient client;
+        private boolean announced = false;
+
+        /** The id of the model of the LAST Anthropic client built in this JVM ("" before one exists). Kept for programs that run one agent; an agent's own model is its client's modelId(). */
         private static volatile String modelInUse = "";
-        private static volatile boolean announced = false;
         public static String modelInUse() { return modelInUse; }
 
-        /** The model a launch uses: the one the architecture asks for, unless -Dfaber.llm.model=ID (or a tool's --llm-model=ID) names another. Any id the API knows works, including ones this SDK has no constant for. */
+        /** The model a launch uses: the one asked for, unless -Dfaber.llm.model=ID names another (LlmProfiles applies it to a profile now; this is the rule in one line). */
         public static String resolveModelId(String askedFor, String override) { return override == null || override.isBlank() ? askedFor : override.trim(); }
 
-        public AnthropicLlmClient(Model model) {
-            String asked = model.asString(), id = resolveModelId(asked, System.getProperty("faber.llm.model"));
-            this.model = id.equals(asked) ? model : Model.Companion.of(id);
-            modelInUse = id; announced = false;
-            if (!id.equals(asked)) System.err.println("[LLM] model: " + id + " (named by -Dfaber.llm.model; the architecture asks for " + asked + ")");
+        /** A client for a profile: its model, its output budget and ceiling, its thinking mode. Several clients with different profiles can live in one JVM. */
+        public AnthropicLlmClient(LlmProfile profile) {
+            this.profile = profile;
+            this.model = profile.modelId.equals(Model.CLAUDE_SONNET_5.asString()) ? Model.CLAUDE_SONNET_5 : Model.Companion.of(profile.modelId);
+            modelInUse = profile.modelId;
             client = AnthropicOkHttpClient.fromEnv();
         }
+
+        @Override public String modelId() { return profile.modelId; }
 
         @Override
         public LlmCallResult plan(String systemPrompt, String context) throws IOException, InterruptedException {
 
-            if (!announced) { announced = true; System.err.println("[LLM] model in use: " + modelInUse); }
+            if (!announced) { announced = true; System.err.println("[LLM] model in use: " + profile.modelId + " (profile " + profile.name + ", prompt " + profile.promptId() + ")"); }
             // System.out.println("--------------------- CONTEXT: \n"+ context+"\n---------------------\n");
             
             // Transient server overload is retried indefinitely (as before). A response that comes back with NO text
@@ -100,7 +106,7 @@ public interface LlmClient {
                                     .cacheControl(CacheControlEphemeral.builder().build())
                                     .build()))
                     .addUserMessage(context);
-                if (thinkingDisabled()) paramsBuilder.thinking(com.anthropic.models.messages.ThinkingConfigDisabled.builder().build());
+                if (profile.thinkingDisabled) paramsBuilder.thinking(com.anthropic.models.messages.ThinkingConfigDisabled.builder().build());
                 com.anthropic.models.messages.MessageCreateParams params = paramsBuilder.build();
                 Message message = null;
                 while (true) {
@@ -113,7 +119,7 @@ public interface LlmClient {
                     }
                 }
                 return adapt(message);
-            }, maxTokens(), maxTokensCap(), MAX_EMPTY_RESPONSE_ATTEMPTS, ms -> { try { Thread.sleep(ms); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); } });
+            }, profile.maxTokens, profile.maxTokensCap, MAX_EMPTY_RESPONSE_ATTEMPTS, ms -> { try { Thread.sleep(ms); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); } });
         }        
 
         static final int MAX_EMPTY_RESPONSE_ATTEMPTS = 3;
@@ -133,7 +139,7 @@ public interface LlmClient {
                     u.cacheCreationInputTokens().orElse(0L), u.cacheReadInputTokens().orElse(0L), thinkingBlocks, thinkingChars);
         }
 
-        /** Max output tokens per call: -Dfaber.llm.maxTokens=N (default 8192). */
+        /** The process-wide defaults, from the properties (what a profile starts from when nothing else says): max output tokens per call, -Dfaber.llm.maxTokens=N (default 8192). */
         public static long maxTokens() { return Long.getLong("faber.llm.maxTokens", 8192L); }
 
         /** -Dfaber.llm.thinking=disabled turns model "thinking" off explicitly; anything else leaves the model's own default. */

@@ -33,6 +33,24 @@ public class Agent {
 		agentArch = new AgentArchitecture(this, eventQueue, seedGoal);
 	}
 
+	/** An agent that talks to its model as a profile says: which model, which limits, which system prompt. Different agents of one run may have different profiles. */
+	public Agent(String agentId, LlmProfile profile, SeedGoal seedGoal) {
+		this();
+		this.agentId = agentId;
+		agentArch = new AgentArchitecture(this, eventQueue, profile, seedGoal);
+	}
+
+	/** A client of its own (a scripted one) with a profile: the system prompt and the limits are the profile's. */
+	public Agent(String agentId, LlmClient client, LlmProfile profile, SeedGoal seedGoal) {
+		this();
+		this.agentId = agentId;
+		agentArch = new AgentArchitecture(this, eventQueue, client, profile, seedGoal);
+	}
+
+	/** The profile this agent's architecture runs with, and the model its client talks to (for a run's records). */
+	public LlmProfile llmProfile() { return agentArch.profile(); }
+	public String llmModelId() { return agentArch.llmClient().modelId(); }
+
 	public Agent(String agentId, LlmClient client, SeedGoal seedGoal) {
 		this();
 		this.agentId = agentId;

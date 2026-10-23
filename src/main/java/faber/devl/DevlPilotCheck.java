@@ -764,6 +764,92 @@ public final class DevlPilotCheck {
               resSE.contains("ended by: stalled: 6 cycles in a row with nothing new and nothing done") && resSE.contains("debrief after stage2-policy") && resSE.contains("stage3-less-support") && !resSE.contains("RUN ABORTED") && (resSE.contains("stage2-policy") && resSE.indexOf("stalled") < resSE.indexOf("stage3-less-support")));
         } else System.out.println("SKIP  end to end, a stalled stage ends as 'stalled' and the run goes on (slow: about 3 minutes; run with -Dfaber.devl.slowChecks=true)");
 
+        // ---- 17g. profiles: how an agent talks to its model is a value, not a line of code
+        var dflt = faber.agent.LlmProfiles.defaultProfile();
+        check("the default profile is the behaviour the framework has always had: the catalog's default is sonnet-5 — Anthropic, claude-sonnet-5, 8192 output tokens raised up to 32000, the model's own thinking, three attempts at an unreadable reply, the core prompt — and its prompt is, byte for byte, the system prompt as it was (the hash the suites pin); the catalog also has haiku-5-5, sonnet-5-5 and opus-5-5",
+              faber.agent.LlmProfiles.defaultName().equals("sonnet-5") && dflt.name.equals("sonnet-5") && dflt.provider.equals("anthropic") && dflt.modelId.equals("claude-sonnet-5") && dflt.maxTokens == 8192L && dflt.maxTokensCap == 32000L && !dflt.thinkingDisabled && dflt.formatAttempts == 3
+              && dflt.prompt.equals("core") && dflt.promptId().equals("core") && dflt.systemPrompt() == faber.agent.SystemPrompt.systemPrompt && DevlRunner.sha12(dflt.systemPrompt()).equals("a861f6f56d88") && dflt.describeSettings().equals("maxTokens=8192 (raised, up to 32000, for a call that returns no text), thinking=model default")
+              && faber.agent.LlmProfiles.names().containsAll(List.of("sonnet-5", "sonnet-5-5", "haiku-5-5", "opus-5-5")) && faber.agent.LlmProfiles.named("haiku-5-5").modelId.equals("claude-haiku-5-5") && faber.agent.LlmProfiles.named("opus-5-5").modelId.equals("claude-opus-5-5"));
+        String[] keep17g = { "faber.llm.profile", "faber.llm.model", "faber.llm.maxTokens", "faber.llm.maxTokensCap", "faber.llm.thinking", "faber.prompt.overlay", "faber.prompt.overlays" };
+        java.util.Map<String, String> saved17g = new java.util.HashMap<>(); for (String k : keep17g) saved17g.put(k, System.getProperty(k));
+        String problems17g = "";
+        try {
+            var hk = faber.agent.LlmProfiles.resolve("haiku-5-5", null, null); var adhoc = faber.agent.LlmProfiles.resolve(null, "claude-haiku-4-5", null); var both = faber.agent.LlmProfiles.resolve("haiku-5-5", "claude-x", null); var same = faber.agent.LlmProfiles.resolve("sonnet-5", "claude-sonnet-5", null);
+            System.setProperty("faber.llm.profile", "opus-5-5"); var viaProp = faber.agent.LlmProfiles.defaultProfile(); var explicitWins = faber.agent.LlmProfiles.resolve("haiku-5-5", null, null); System.clearProperty("faber.llm.profile");
+            System.setProperty("faber.llm.model", "claude-prop"); System.setProperty("faber.llm.maxTokens", "16000"); System.setProperty("faber.llm.maxTokensCap", "20000"); System.setProperty("faber.llm.thinking", "disabled");
+            var overridden = faber.agent.LlmProfiles.defaultProfile(); var explicitModel = faber.agent.LlmProfiles.resolve(null, "claude-arg", null);
+            for (String k : keep17g) System.clearProperty(k);
+            String unknown = ""; try { faber.agent.LlmProfiles.resolve("nope", null, null); } catch (IllegalArgumentException e) { unknown = e.getMessage(); }
+            if (!(hk.name.equals("haiku-5-5") && hk.modelId.equals("claude-haiku-5-5"))) problems17g += " [named]";
+            if (!(adhoc.name.equals("ad hoc (claude-haiku-4-5)") && adhoc.modelId.equals("claude-haiku-4-5") && adhoc.maxTokens == 8192L && adhoc.prompt.equals("core"))) problems17g += " [ad hoc model: " + adhoc.name + "]";
+            if (!(both.name.equals("haiku-5-5+model=claude-x") && both.modelId.equals("claude-x"))) problems17g += " [profile and model: " + both.name + "]";
+            if (!(same.name.equals("sonnet-5"))) problems17g += " [the same model renames nothing: " + same.name + "]";
+            if (!(viaProp.name.equals("opus-5-5") && explicitWins.name.equals("haiku-5-5"))) problems17g += " [property and argument: " + viaProp.name + " / " + explicitWins.name + "]";
+            if (!(overridden.modelId.equals("claude-prop") && overridden.maxTokens == 16000L && overridden.maxTokensCap == 20000L && overridden.thinkingDisabled && explicitModel.modelId.equals("claude-arg"))) problems17g += " [the properties: " + overridden + "]";
+            if (!(unknown.contains("no profile 'nope'") && unknown.contains("haiku-5-5") && unknown.contains("sonnet-5"))) problems17g += " [unknown profile: " + unknown + "]";
+        } finally { for (String k : keep17g) { if (saved17g.get(k) == null) System.clearProperty(k); else System.setProperty(k, saved17g.get(k)); } }
+        check("a profile is chosen by name and adjusted in a fixed order — what the launch names (a tool's --llm-profile, --llm-model), then the process-wide properties (-Dfaber.llm.profile, .model, .maxTokens, .maxTokensCap, .thinking), then the catalog; a model alone makes an ad hoc profile that says so, a profile with another model says that in its name, the same model renames nothing, and an unknown profile is refused naming those that exist:" + problems17g, problems17g.isEmpty());
+        java.nio.file.Path ovDir = java.nio.file.Files.createTempDirectory("overlays"); java.nio.file.Files.writeString(ovDir.resolve("haiku-hint.md"), "OVERLAY: when you are stuck, try the other concepts of the model before asking.\n"); java.nio.file.Files.writeString(ovDir.resolve("empty.md"), "  \n");
+        String ovProblems = ""; String savedOv = System.getProperty("faber.prompt.overlays");
+        try {
+            String core = faber.agent.SystemPrompt.systemPrompt;
+            String missingOv = ""; try { faber.agent.SystemPrompt.compose("nope"); } catch (IllegalArgumentException e) { missingOv = e.getMessage(); }
+            System.setProperty("faber.prompt.overlays", ovDir.toString());
+            String ov = faber.agent.SystemPrompt.compose("haiku-hint"); String idv = faber.agent.SystemPrompt.identity("haiku-hint");
+            String badOv = ""; try { faber.agent.SystemPrompt.compose("../x"); } catch (IllegalArgumentException e) { badOv = e.getMessage(); }
+            String emp = ""; try { faber.agent.SystemPrompt.compose("empty"); } catch (IllegalStateException e) { emp = e.getMessage(); }
+            if (faber.agent.SystemPrompt.compose(null) != core || faber.agent.SystemPrompt.compose("core") != core || faber.agent.SystemPrompt.compose("  ") != core) ovProblems += " [no overlay is the constant]";
+            if (!ov.contains("OVERLAY: when you are stuck") || ov.length() != core.length() + "OVERLAY: when you are stuck, try the other concepts of the model before asking.".length() + 1 || !ov.startsWith(core.substring(0, 2000)) || !ov.endsWith(core.substring(core.length() - 2000))) ovProblems += " [composition: core, overlay, manuals]";
+            if (!idv.matches("haiku-hint@[0-9a-f]{12}") || faber.agent.SystemPrompt.identity(null).equals("core") == false) ovProblems += " [identity: " + idv + "]";
+            if (!(missingOv.contains("no prompt overlay 'nope'") && missingOv.contains("faber/agent/prompt-overlays/nope.md") && missingOv.contains("-Dfaber.prompt.overlays=DIR"))) ovProblems += " [missingOv: " + missingOv + "]";
+            if (!badOv.contains("letters, digits")) ovProblems += " [a path as an id: " + badOv + "]";
+            if (!emp.contains("is empty")) ovProblems += " [empty: " + emp + "]";
+            if (!dflt.withPrompt("haiku-hint").systemPrompt().equals(ov) || !dflt.withPrompt("haiku-hint").promptId().equals(idv)) ovProblems += " [through a profile]";
+        } finally { if (savedOv == null) System.clearProperty("faber.prompt.overlays"); else System.setProperty("faber.prompt.overlays", savedOv); }
+        check("the system prompt is one core for every model and an overlay is the whole difference: no overlay is the constant itself; an overlay (a resource, or a file in -Dfaber.prompt.overlays) is composed between the core text and the manuals, so the prompt is exactly longer by it; it is identified by its id and its hash; one that cannot be found says where it looked, one named like a path or left empty is refused:" + ovProblems, ovProblems.isEmpty());
+        java.util.List<String> sys17g = new ArrayList<>(); java.util.List<String> made17g = new ArrayList<>();
+        faber.agent.LlmClients.register("test-echo", prof -> { made17g.add(prof.name); return new LlmClient() { public LlmCallResult plan(String sys, String ctx) { sys17g.add(prof.name + "|" + (sys == faber.agent.SystemPrompt.systemPrompt ? "core" : sys.contains("OVERLAY") ? "overlay" : "other")); return new LlmCallResult(okOut, 1, 5, 0, 22063, "end_turn"); } public String modelId() { return "echo-" + prof.modelId; } }; });
+        System.setProperty("faber.prompt.overlays", ovDir.toString());
+        faber.agent.LlmProfile pA = new faber.agent.LlmProfile("pA", "test-echo", "model-a", 8192, 32000, false, 3, "core"), pB = new faber.agent.LlmProfile("pB", "test-echo", "model-b", 8192, 32000, false, 2, "haiku-hint");
+        Workspace w17g = new Workspace(); w17g.initDefaultArtifacts(); Workspace w17h = new Workspace(); w17h.initDefaultArtifacts();
+        Agent aA = new Agent("agent-A", pA, new SeedGoal("serve-user", "Serve the user.")), aB = new Agent("agent-B", pB, new SeedGoal("serve-user", "Serve the user."));
+        aA.init(w17g); aB.init(w17h);
+        java.io.ByteArrayOutputStream cap17g = new java.io.ByteArrayOutputStream(); java.io.PrintStream keep17gs = System.out; System.setOut(new java.io.PrintStream(cap17g, true, "UTF-8"));
+        try { aA.doYourJobAndSelfEvaluate(1); aB.doYourJobAndSelfEvaluate(1); } finally { System.setOut(keep17gs); System.clearProperty("faber.prompt.overlays"); if (savedOv != null) System.setProperty("faber.prompt.overlays", savedOv); }
+        String unknownProvider = ""; try { new faber.agent.LlmProfile("pX", "nowhere", "m", 8192, 32000, false, 3, "core").newClient(); } catch (IllegalArgumentException e) { unknownProvider = e.getMessage(); }
+        check("two agents of one run can have different profiles: each has its own client, its own model and its own system prompt (the core for one, the overlay for the other — which is what its client was handed), and the limits of its own profile; a provider that is not registered is refused naming those that are",
+              made17g.equals(List.of("pA", "pB")) && sys17g.equals(List.of("pA|core", "pB|overlay")) && aA.llmModelId().equals("echo-model-a") && aB.llmModelId().equals("echo-model-b") && aA.llmProfile() == pA && aB.llmProfile() == pB && aB.llmProfile().formatAttempts == 2
+              && unknownProvider.contains("no client for the provider 'nowhere'") && unknownProvider.contains("anthropic") && unknownProvider.contains("test-echo"));
+        w17g.shutdown(); w17h.shutdown();
+        int[] calls17g = {0}; var pC = new faber.agent.LlmProfile("pC", "test-echo", "model-c", 8192, 32000, false, 2, "core");
+        Workspace w17i = new Workspace(); w17i.initDefaultArtifacts();
+        Agent aC = new Agent("agent-C", new LlmClient() { public LlmCallResult plan(String sys, String ctx) { calls17g[0]++; return new LlmCallResult("this is not a reply the architecture can read", 1, 5, 0, 22063, "end_turn"); } }, pC, new SeedGoal("serve-user", "Serve the user."));
+        aC.init(w17i); String died17g = ""; java.io.PrintStream keepE17g = System.err; System.setErr(new java.io.PrintStream(new java.io.ByteArrayOutputStream(), true, "UTF-8")); java.io.PrintStream keepO17g = System.out; System.setOut(new java.io.PrintStream(new java.io.ByteArrayOutputStream(), true, "UTF-8"));
+        try { aC.doYourJobAndSelfEvaluate(1); } catch (RuntimeException e) { died17g = e.toString(); } finally { System.setErr(keepE17g); System.setOut(keepO17g); }
+        check("the number of attempts at an unreadable reply is the profile's, not a constant of the architecture: a profile that says two asks the model twice and then gives up saying so (and a profile of a cheaper model may say more)", calls17g[0] == 2 && died17g.contains("remained malformed after 2 attempts"));
+        w17i.shutdown();
+        String leaks17g = "";
+        for (Class<?> c : new Class<?>[] { faber.agent.AgentArchitecture.class, Agent.class }) {
+            byte[] b; try (java.io.InputStream in = c.getResourceAsStream(c.getSimpleName() + ".class")) { b = in.readAllBytes(); }
+            String txt = new String(b, java.nio.charset.StandardCharsets.ISO_8859_1);
+            for (String needle : new String[] { "com/anthropic", "AnthropicLlmClient", "CLAUDE_" }) if (txt.contains(needle)) leaks17g += " " + c.getSimpleName() + " mentions " + needle;
+        }
+        check("the agent and its architecture name no provider and no model: not one reference to the Anthropic SDK, to its client or to a model constant in either class — everything about the model is the profile's:" + leaks17g, leaks17g.isEmpty());
+        var oLP = DevlLearningMain.parse(new String[] { "--project=p", "--llm-profile=haiku-5-5", "--prompt-overlay=x" }); var oAP = DevlAssessmentMain.parse(new String[] { "--project=p", "--playbook=x.json", "--llm-profile=haiku-5-5", "--llm-model=claude-m", "--prompt-overlay=x" }); var oOP = DevlOperationMain.parse(new String[] { "--project=p", "--playbook=x.json", "--llm-profile=opus-5-5" });
+        String unknownLaunch = ""; try { run(new String[] { "--project=toy-room-booking", "--phase=learning", "--llm-profile=nope" }, (ctx, w) -> CheckKit.IDLE); } catch (IllegalArgumentException e) { unknownLaunch = e.getMessage(); }
+        String unknownOv = ""; try { run(new String[] { "--project=toy-room-booking", "--phase=learning", "--prompt-overlay=nope" }, (ctx, w) -> CheckKit.IDLE); } catch (IllegalArgumentException e) { unknownOv = e.getMessage(); }
+        check("every tool takes --llm-profile=NAME and --prompt-overlay=ID (with --llm-model=ID as before); empty ones are refused saying what is expected; a profile or an overlay that does not exist is a launch error, before anything starts, that names those that do",
+              oLP.llmProfile.equals("haiku-5-5") && oLP.promptOverlay.equals("x") && oAP.llmProfile.equals("haiku-5-5") && oAP.llmModel.equals("claude-m") && oOP.llmProfile.equals("opus-5-5") && DevlLearningMain.parse(new String[] { "--project=p" }).llmProfile == null
+              && rL.apply(new String[] { "--project=p", "--llm-profile=" }).contains("--llm-profile takes the name of a profile") && rA.apply(new String[] { "--project=p", "--playbook=x", "--prompt-overlay=" }).contains("--prompt-overlay takes the id of a prompt overlay")
+              && DevlLearningMain.USAGE.contains("[--llm-profile=NAME]") && DevlAssessmentMain.USAGE.contains("[--prompt-overlay=ID]") && DevlOperationMain.USAGE.contains("[--llm-profile=NAME]")
+              && unknownLaunch.contains("no profile 'nope'") && unknownLaunch.contains("haiku-5-5") && unknownOv.contains("no prompt overlay 'nope'"));
+        Object[] rpE = run(new String[] { "--project=toy-room-booking", "--phase=learning", "--llm-profile=haiku-5-5" }, brainLT);
+        String logPE = (String) rpE[0], resPE = (String) rpE[1]; @SuppressWarnings("unchecked") List<java.nio.file.Path> pbPE = (List<java.nio.file.Path>) rpE[2];
+        check("a run records the profile and the prompt as well as the model, in the console and log (the profile, its provider and model, the prompt; the hash of the text the agent reads), in the first line of the result, and — for a learning run — in the snapshot's options; a candidate records them in its lineage",
+              logPE.contains("[devl] llm profile: haiku-5-5 (anthropic, model claude-haiku-5-5), prompt core") && logPE.contains("system prompt: " + faber.agent.SystemPrompt.systemPrompt.length() + " chars, sha256 a861f6f56d88") && resPE.contains("llm=scripted (test) profile=haiku-5-5 prompt=core")
+              && (pbPE.isEmpty() || (PlaybookSnapshot.read(pbPE.get(0)).manifest.getJSONObject("options").getString("llm_profile").equals("haiku-5-5") && PlaybookSnapshot.read(pbPE.get(0)).manifest.getJSONObject("options").getString("prompt").equals("core")))
+              && candAT.manifest.getJSONObject("lineage").getString("revised_with_profile").equals("sonnet-5") && candAT.manifest.getJSONObject("lineage").getString("revised_with_prompt").equals("core"));
+
         // ---- 17d. the agent's model is a launch parameter, and what a run records: the log, the result, the snapshot, its provenance, the candidate
         check("the model of the agent is chosen by the launch, not by the code: the architecture's own choice stands unless a model id is named (-Dfaber.llm.model, or the tool's --llm-model); a blank name changes nothing; any id the API knows works, including ones the SDK has no constant for",
               faber.agent.LlmClient.AnthropicLlmClient.resolveModelId("claude-sonnet-5", null).equals("claude-sonnet-5") && faber.agent.LlmClient.AnthropicLlmClient.resolveModelId("claude-sonnet-5", "").equals("claude-sonnet-5") && faber.agent.LlmClient.AnthropicLlmClient.resolveModelId("claude-sonnet-5", "  ").equals("claude-sonnet-5")

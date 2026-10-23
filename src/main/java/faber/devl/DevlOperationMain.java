@@ -8,11 +8,11 @@ import faber.devl.DevlRunner.Options;
  * THE OPERATION TOOL. A fresh instance made from a playbook does the job after the change (a queue in the changed world), with the model at version 2 (--model=in-step) or left behind (--model=stale).
  * The playbook is frozen at work. It writes no snapshot: what a run shows is read from its log and result.
  *
- *   faber.devl.DevlOperationMain --project=<folder> --playbook=FILE [--model=in-step|stale] [--max-cycles=90] [--log-dir=devl-logs] [--watchdog-seconds=90] [--llm-model=ID]
+ *   faber.devl.DevlOperationMain --project=<folder> --playbook=FILE [--model=in-step|stale] [--max-cycles=90] [--log-dir=devl-logs] [--watchdog-seconds=90] [--llm-profile=NAME] [--llm-model=ID] [--prompt-overlay=ID]
  */
 public final class DevlOperationMain {
     private DevlOperationMain() {}
-    static final String USAGE = "DevlOperationMain --project=<folder> --playbook=FILE [--model=in-step|stale] [--max-cycles=N] [--log-dir=DIR] [--watchdog-seconds=N] [--llm-model=ID]";
+    static final String USAGE = "DevlOperationMain --project=<folder> --playbook=FILE [--model=in-step|stale] [--max-cycles=N] [--log-dir=DIR] [--watchdog-seconds=N] [--llm-profile=NAME] [--llm-model=ID] [--prompt-overlay=ID]";
 
     public static Options parse(String[] args) {
         Options o = new Options(); o.phase = "operation";

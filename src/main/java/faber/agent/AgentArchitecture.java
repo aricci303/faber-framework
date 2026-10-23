@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.json.JSONObject;
-import com.anthropic.models.messages.Model;
 import faber.agent.LlmClient.LlmCallResult;
 import faber.agent.formal.Coherence;
 import faber.agent.formal.CoreTuple;
@@ -82,6 +81,9 @@ public class AgentArchitecture {
 	private long nextCycleToRun;	
 	
 	private LlmClient llm;
+	/** How this agent talks to its model: which one, with what limits, which system prompt. The architecture names no model and no provider. */
+	private final LlmProfile profile;
+	private final String systemPrompt;
 
 	public static record ActResult(
 			String act,
@@ -100,16 +102,35 @@ public class AgentArchitecture {
 	}
 
 	
+	/** An architecture with a client of its own (a scripted one in tests): it reads the system prompt and takes the call settings of the default profile. */
 	public AgentArchitecture(Agent agent, EventQueue eventQueue, LlmClient llmClient, SeedGoal seedGoal) {
+		this(agent, eventQueue, llmClient, LlmProfiles.defaultProfile(), seedGoal);
+	}
+
+	/** An architecture for a profile: it builds the profile's client and reads the profile's system prompt. */
+	public AgentArchitecture(Agent agent, EventQueue eventQueue, LlmProfile profile, SeedGoal seedGoal) {
+		this(agent, eventQueue, profile.newClient(), profile, seedGoal);
+	}
+
+	/** An architecture with the default profile (LlmProfiles.defaultProfile: the catalog's default, adjusted by the process-wide properties). */
+	public AgentArchitecture(Agent agent, EventQueue eventQueue, SeedGoal seedGoal) {
+		this(agent, eventQueue, LlmProfiles.defaultProfile(), seedGoal);
+	}
+
+	/** An architecture with a client of its own AND a profile (a scripted client that must be handed the profile's system prompt, in tests and experiments). */
+	public AgentArchitecture(Agent agent, EventQueue eventQueue, LlmClient llmClient, LlmProfile profile, SeedGoal seedGoal) {
 		this.eventQueue = eventQueue;
 		this.agent = agent;
 		llm = llmClient;
+		this.profile = profile;
+		this.systemPrompt = profile.systemPrompt();
 		this.seedGoal = seedGoal;
 	}
 
-	public AgentArchitecture(Agent agent, EventQueue eventQueue, SeedGoal seedGoal) {
-		this(agent, eventQueue, new LlmClient.AnthropicLlmClient(Model.CLAUDE_SONNET_5), seedGoal);
-	}
+	public LlmProfile profile() { return profile; }
+
+	/** The client in use: what a run asks for the model's id. */
+	public LlmClient llmClient() { return llm; }
 
 	void init(Workspace workspace) {
 		this.workspace = workspace;
@@ -189,7 +210,7 @@ public class AgentArchitecture {
 		// triggered this cycle. Only the call+parse step retries; each attempt's tokens are summed
 		// honestly into the final reported total, since real cost was spent on every attempt, not
 		// just the one that happened to succeed.
-		final int maxAttempts = 3;
+		final int maxAttempts = profile.formatAttempts;
 		String attemptContext = currentContext;
 		LlmClient.LlmCallResult lastCallResult = null;
 		currentPlanResult = null;
@@ -198,7 +219,7 @@ public class AgentArchitecture {
 		try {
 			for (int attempt = 1; attempt <= maxAttempts; attempt++) {
 				
-				lastCallResult = llm.plan(SystemPrompt.systemPrompt, attemptContext);
+				lastCallResult = llm.plan(systemPrompt, attemptContext);
 				
 				sumInputNonCached += lastCallResult.numInputTokens();
 				sumCacheCreation += lastCallResult.cacheCreationInputTokens();

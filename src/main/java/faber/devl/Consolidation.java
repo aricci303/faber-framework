@@ -88,7 +88,7 @@ public final class Consolidation {
                 new JSONObject().put("run", runLog).put("snapshot_after", LABEL).put("cycle", endCycle).put("reconstructed_from_log", false).put("kind", "candidate"),
                 new JSONObject().put("parent", parent.id()).put("round", round).put("produced_by", runLog).put("instruction", VERSION).put("assessed", assessedJson)
                         .put("playbook_revised", r.playbookRevised).put("advisory_gate", gate)
-                        .put("revised_with_model", DevlRunner.llmModel).put("playbook_during_assessment", watch == null ? JSONObject.NULL : watch.json()).put("parent_comparison", cmp == null ? JSONObject.NULL : cmp.json()), history);
+                        .put("revised_with_model", DevlRunner.llmModel).put("revised_with_profile", DevlRunner.llmProfileName).put("revised_with_prompt", DevlRunner.promptId).put("playbook_during_assessment", watch == null ? JSONObject.NULL : watch.json()).put("parent_comparison", cmp == null ? JSONObject.NULL : cmp.json()), history);
         r.file = dir.resolve("devl-playbook-" + stamp + "-c" + round + ".json");
         cand.write(r.file); r.candidateWritten = true;
         r.lines.add("  release candidate written: " + r.file.getFileName() + " (" + id + ", round " + round + ", from " + parent.id() + "; assessed before it: " + assessed + ")");

@@ -9,15 +9,17 @@ import faber.devl.DevlRunner.Options;
  * with the model published at version 2 in step with the change, or left behind (--model=stale: the drift probe). The playbook is frozen while the instance is assessed. With --consolidate, one instance then
  * revises the playbook and the run writes a release candidate (devl-playbook-<stamp>-c<round>.json) with its lineage and an advisory gate.
  *
- *   faber.devl.DevlAssessmentMain --project=<folder> --playbook=FILE [--only=a1|a2a|a1,a2a] [--model=in-step|stale] [--consolidate] [--max-cycles=90] [--log-dir=devl-logs] [--watchdog-seconds=90] [--llm-model=ID]
+ *   faber.devl.DevlAssessmentMain --project=<folder> --playbook=FILE [--only=a1|a2a|a1,a2a] [--model=in-step|stale] [--consolidate] [--max-cycles=90] [--log-dir=devl-logs] [--watchdog-seconds=90] [--llm-profile=NAME] [--llm-model=ID] [--prompt-overlay=ID]
  *
- * --llm-model  the Anthropic model of the agent (default: the one the architecture asks for; any model id the API knows, e.g. claude-haiku-5-5); recorded in the log and in every snapshot. -Dfaber.llm.model=ID does the same.
+ * --llm-profile  the agent's profile (model, call limits, prompt): a name from faber/agent/llm-profiles.json (default sonnet-5), e.g. haiku-5-5; -Dfaber.llm.profile=NAME does the same.
+ * --llm-model    another model id for the profile (any id the API knows); -Dfaber.llm.model=ID does the same.  --prompt-overlay  a named overlay on the core system prompt (none by default).
+ *                 What a run used — the profile, the model, the prompt — is recorded in the log, the result and every snapshot.
  * --project    the project's folder in resources/faber/devl/projects (e.g. expense-approval); a playbook learned for another project is refused
  * --playbook   the playbook snapshot (devl-playbook-<stamp>.json, from DevlLearningMain or from a consolidation) the instance is made from
  */
 public final class DevlAssessmentMain {
     private DevlAssessmentMain() {}
-    static final String USAGE = "DevlAssessmentMain --project=<folder> --playbook=FILE [--only=a1|a2a] [--model=in-step|stale] [--consolidate] [--max-cycles=N] [--log-dir=DIR] [--watchdog-seconds=N] [--llm-model=ID]";
+    static final String USAGE = "DevlAssessmentMain --project=<folder> --playbook=FILE [--only=a1|a2a] [--model=in-step|stale] [--consolidate] [--max-cycles=N] [--log-dir=DIR] [--watchdog-seconds=N] [--llm-profile=NAME] [--llm-model=ID] [--prompt-overlay=ID]";
 
     public static Options parse(String[] args) {
         Options o = new Options(); o.phase = "assessment";

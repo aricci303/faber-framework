@@ -54,6 +54,8 @@ public final class DevlRunner {
     public static boolean exitOnAbort = true;
     /** The model of the agent in this run, as the run records it: the id the Anthropic client was built with, or "scripted (test)" in the suites. Read by the snapshot's options and the candidate's lineage. */
     public static String llmModel = "unknown";
+    /** The profile and the prompt of the agent in this run, as the run records them (the profile's name; "core", or an overlay's id and hash). */
+    public static String llmProfileName = "unknown", promptId = "unknown";
     public static java.util.function.Consumer<CaseWorld> worldHook = null;
 
     public static final String MODEL_ID = "domain-model-01", LIBRARY_ID = "task-library-01";
@@ -115,7 +117,7 @@ public final class DevlRunner {
     // ---- options ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     public static final class Options {
-        public String phase = "learning", tutor = "scripted", logDir = "devl-logs", playbook = null, model = "in-step", project = null, llmModel = null;
+        public String phase = "learning", tutor = "scripted", logDir = "devl-logs", playbook = null, model = "in-step", project = null, llmModel = null, llmProfile = null, promptOverlay = null;
         public int maxCycles = 90, watchdogSeconds = 90; public boolean consolidate = false;
         public Set<String> only = new LinkedHashSet<>(List.of("a1", "a2a"));      // an ordered set: Set.of iterates in an order that varies from one JVM run to the next
     }
@@ -152,6 +154,8 @@ public final class DevlRunner {
         else if (a.startsWith("--max-cycles=")) o.maxCycles = number("--max-cycles", a.substring(13), 1, 500);
         else if (a.startsWith("--log-dir=")) o.logDir = a.substring(10);
         else if (a.startsWith("--watchdog-seconds=")) o.watchdogSeconds = number("--watchdog-seconds", a.substring(19), 0, 3600);
+        else if (a.startsWith("--llm-profile=")) { o.llmProfile = a.substring(14).trim(); if (o.llmProfile.isEmpty()) throw new IllegalArgumentException("--llm-profile takes the name of a profile of the catalog (faber/agent/llm-profiles.json)"); }
+        else if (a.startsWith("--prompt-overlay=")) { o.promptOverlay = a.substring(17).trim(); if (o.promptOverlay.isEmpty()) throw new IllegalArgumentException("--prompt-overlay takes the id of a prompt overlay (faber/agent/prompt-overlays/<id>.md, or <id>.md in -Dfaber.prompt.overlays=DIR)"); }
         else if (a.startsWith("--llm-model=")) { o.llmModel = a.substring(12).trim(); if (o.llmModel.isEmpty()) throw new IllegalArgumentException("--llm-model takes the id of an Anthropic model (e.g. claude-haiku-5-5)"); }
         else return false;
         return true;
@@ -236,10 +240,13 @@ public final class DevlRunner {
             for (String w : playbook.warnings(MATERIALS_VERSION)) System.out.println("[devl] playbook WARNING: " + w);
             for (String w : playbook.environmentWarnings(modelRecord, libraryRecord)) System.out.println("[devl] playbook WARNING: " + w);
         }
-        System.out.println("[devl] system prompt: " + faber.agent.SystemPrompt.systemPrompt.length() + " chars, sha256 " + sha12(faber.agent.SystemPrompt.systemPrompt)
+        faber.agent.LlmProfile profile = faber.agent.LlmProfiles.resolve(o.llmProfile, o.llmModel, o.promptOverlay);       // an unknown profile or overlay fails here, as a launch error
+        String promptText = profile.systemPrompt();
+        System.out.println("[devl] system prompt: " + promptText.length() + " chars, sha256 " + sha12(promptText)
                 + " (loaded now, so that a prompt problem fails here and not mid-run; the hash identifies the exact text the agent reads, manuals included)");
+        System.out.println("[devl] llm profile: " + profile.name + " (" + profile.provider + ", model " + profile.modelId + "), prompt " + profile.promptId());
         System.out.println("[devl] logging to " + logFile.toAbsolutePath());
-        System.out.println("[devl] llm: " + faber.agent.LlmClient.AnthropicLlmClient.settingsSummary() + "   (change with -Dfaber.llm.maxTokens=N, -Dfaber.llm.maxTokensCap=N and -Dfaber.llm.thinking=disabled)");
+        System.out.println("[devl] llm: " + profile.describeSettings() + "   (change with -Dfaber.llm.maxTokens=N, -Dfaber.llm.maxTokensCap=N and -Dfaber.llm.thinking=disabled)");
         System.out.println("[devl] watchdog notice after " + o.watchdogSeconds + "s of silence");
         if (o.watchdogSeconds > 0) RunLog.startWatchdog(5_000, o.watchdogSeconds * 1000L);
 
@@ -262,9 +269,9 @@ public final class DevlRunner {
         RuleReference reference = RuleReference.load(cd.rulesResource());
 
         SeedGoal seed = new SeedGoal("serve-user", "Serve the user's requests as they arise, remaining available and responsive by default.");
-        if (o.llmModel != null) System.setProperty("faber.llm.model", o.llmModel);        // the tool's --llm-model; the client reads it when the agent builds it
-        Agent agent = llmOverride != null ? new Agent("agent-0", llmOverride, seed) : new Agent("agent-0", seed);
-        llmModel = llmOverride != null ? "scripted (test)" : faber.agent.LlmClient.AnthropicLlmClient.modelInUse();
+        Agent agent = llmOverride != null ? new Agent("agent-0", llmOverride, profile, seed) : new Agent("agent-0", profile, seed);
+        llmModel = llmOverride != null ? "scripted (test)" : agent.llmModelId();
+        llmProfileName = profile.name; promptId = profile.promptId();
         System.out.println("[devl] llm model: " + llmModel);
         agent.init(workspace);
         UserConsoleArtifact console = workspace.getUserConsole();
@@ -278,7 +285,7 @@ public final class DevlRunner {
         agent.forceObserving(library.id());                                       // the same for the task library: a trusted artifact among the agent's tools, its version in view
 
         List<String> report = new ArrayList<>();
-        report.add("project=" + cd.id() + " phase=" + o.phase + " tutor=" + o.tutor + " llm=" + llmModel);
+        report.add("project=" + cd.id() + " phase=" + o.phase + " tutor=" + o.tutor + " llm=" + llmModel + " profile=" + llmProfileName + " prompt=" + promptId);
         if (playbook != null) {
             report.add("INSTANCE of playbook " + playbook.provenanceLine());
             if (playbook.caseId() == null) report.add("  playbook warning: the file does not say which project it was learned for; taken to be '" + cd.id() + "'");
@@ -384,7 +391,7 @@ public final class DevlRunner {
                             System.out.println("[devl " + RunLog.now() + "] NO PLAYBOOK at the end of learning: no snapshot written");
                             report.add("  NO PLAYBOOK at the end of learning: no snapshot written");
                         } else {
-                            JSONObject opts = new JSONObject().put("phase", "learning").put("tutor", o.tutor).put("materials", MATERIALS_VERSION).put("playbook_request", Playbook.VERSION).put("llm_model", llmModel)
+                            JSONObject opts = new JSONObject().put("phase", "learning").put("tutor", o.tutor).put("materials", MATERIALS_VERSION).put("playbook_request", Playbook.VERSION).put("llm_model", llmModel).put("llm_profile", llmProfileName).put("prompt", promptId)
                                     .put("end_rule", "learning " + LEARNING_GRACE + "; assessment " + ASSESSMENT_GRACE + "/" + ASSESSMENT_SETTLE);
                             PlaybookSnapshot snap = PlaybookSnapshot.ofLearning("PB-" + stamp, now, opts,
                                     new JSONObject().put("run", logFile.getFileName().toString()).put("snapshot_after", "debrief:" + st.label).put("cycle", totalCycles).put("reconstructed_from_log", false),
